@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { placesApi } from '../../services/api';
@@ -39,10 +39,10 @@ export default function DiscoveryScreen({ navigation }: any) {
     };
 
     return (
-        <View className="flex-1 bg-white">
+        <View style={styles.container}>
             {location ? (
                 <MapView
-                    className="w-full h-2/3"
+                    style={styles.map}
                     initialRegion={{
                         latitude: location.coords.latitude,
                         longitude: location.coords.longitude,
@@ -64,22 +64,22 @@ export default function DiscoveryScreen({ navigation }: any) {
                     ))}
                 </MapView>
             ) : (
-                <View className="flex-1 items-center justify-center">
+                <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#0000ff" />
-                    <Text className="mt-2 text-gray-500">{errorMsg || "Getting Location..."}</Text>
+                    <Text style={styles.loadingText}>{errorMsg || 'Getting Location...'}</Text>
                 </View>
             )}
 
-            <View className="flex-1 p-4">
-                <Text className="text-xl font-bold mb-2">Lieux à proximité</Text>
+            <View style={styles.listContainer}>
+                <Text style={styles.listTitle}>Lieux à proximité</Text>
                 {loading ? (
                     <ActivityIndicator />
                 ) : places.length === 0 ? (
-                    <Text className="text-gray-500">Aucun lieu trouvé à proximité.</Text>
+                    <Text style={styles.emptyText}>Aucun lieu trouvé à proximité.</Text>
                 ) : (
                     <View>
                         {places.map((p, i) => (
-                            <Text key={i} className="text-base p-2 border-b border-gray-100">{p.name}</Text>
+                            <Text key={i} style={styles.placeItem}>{p.name}</Text>
                         ))}
                     </View>
                 )}
@@ -87,3 +87,43 @@ export default function DiscoveryScreen({ navigation }: any) {
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#ffffff',
+    },
+    map: {
+        width: '100%',
+        height: '66%',
+    },
+    loadingContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadingText: {
+        marginTop: 8,
+        color: '#6b7280',
+    },
+    listContainer: {
+        flex: 1,
+        padding: 16,
+    },
+    listTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 8,
+        color: '#111827',
+    },
+    emptyText: {
+        color: '#6b7280',
+    },
+    placeItem: {
+        fontSize: 16,
+        padding: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+        color: '#111827',
+    },
+});

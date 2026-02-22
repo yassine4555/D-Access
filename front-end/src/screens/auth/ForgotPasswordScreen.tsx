@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 
 export default function ForgotPasswordScreen({ navigation }: any) {
     const [email, setEmail] = useState('');
@@ -14,9 +14,6 @@ export default function ForgotPasswordScreen({ navigation }: any) {
         try {
             setLoading(true);
             // TODO: Implement password reset API call
-            // await authApi.requestPasswordReset(email);
-            
-            // For now, just navigate to reset password screen
             Alert.alert('Success', 'Password reset code sent to your email');
             navigation.navigate('ResetPassword', { email });
         } catch (error: any) {
@@ -28,27 +25,27 @@ export default function ForgotPasswordScreen({ navigation }: any) {
     };
 
     return (
-        <View className="flex-1 bg-white">
+        <View style={styles.container}>
             {/* Header */}
-            <View className="pt-12 px-6 mb-8">
-                <TouchableOpacity 
-                    className="mb-6"
+            <View style={styles.header}>
+                <TouchableOpacity
+                    style={styles.backButton}
                     onPress={() => navigation.goBack()}
                 >
-                    <Text className="text-2xl">←</Text>
+                    <Text style={styles.backArrow}>←</Text>
                 </TouchableOpacity>
 
-                <Text className="text-2xl font-bold text-gray-800 mb-2">Forgot password</Text>
-                <Text className="text-gray-500">
+                <Text style={styles.title}>Forgot password</Text>
+                <Text style={styles.subtitle}>
                     Enter your email or phone we will send the verification code to reset your password
                 </Text>
             </View>
 
-            <View className="flex-1 px-6">
+            <View style={styles.body}>
                 {/* Email Input */}
-                <View className="mb-6">
+                <View style={styles.inputWrapper}>
                     <TextInput
-                        className="w-full px-4 py-3 bg-gray-50 rounded-lg border border-gray-200"
+                        style={styles.input}
                         placeholder="john.vue@gmail.com"
                         placeholderTextColor="#9CA3AF"
                         value={email}
@@ -60,18 +57,75 @@ export default function ForgotPasswordScreen({ navigation }: any) {
 
                 {/* Request Code Button */}
                 <TouchableOpacity
-                    className="w-full bg-cyan-500 py-4 rounded-lg items-center"
+                    style={[styles.button, { opacity: loading ? 0.6 : 1 }]}
                     onPress={handleRequestCode}
                     disabled={loading}
-                    style={{ opacity: loading ? 0.6 : 1 }}
                 >
                     {loading ? (
                         <ActivityIndicator color="white" />
                     ) : (
-                        <Text className="text-white font-semibold text-base">Request code</Text>
+                        <Text style={styles.buttonText}>Request code</Text>
                     )}
                 </TouchableOpacity>
             </View>
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#ffffff',
+    },
+    header: {
+        paddingTop: 48,
+        paddingHorizontal: 24,
+        marginBottom: 32,
+    },
+    backButton: {
+        marginBottom: 24,
+    },
+    backArrow: {
+        fontSize: 24,
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#1f2937',
+        marginBottom: 8,
+    },
+    subtitle: {
+        color: '#6b7280',
+        lineHeight: 22,
+    },
+    body: {
+        flex: 1,
+        paddingHorizontal: 24,
+    },
+    inputWrapper: {
+        marginBottom: 24,
+    },
+    input: {
+        width: '100%',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: '#f9fafb',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        fontSize: 16,
+        color: '#111827',
+    },
+    button: {
+        width: '100%',
+        backgroundColor: '#06b6d4',
+        paddingVertical: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    buttonText: {
+        color: '#ffffff',
+        fontWeight: '600',
+        fontSize: 16,
+    },
+});

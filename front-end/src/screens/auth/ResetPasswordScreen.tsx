@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 
 export default function ResetPasswordScreen({ navigation, route }: any) {
     const [newPassword, setNewPassword] = useState('');
@@ -45,28 +45,28 @@ export default function ResetPasswordScreen({ navigation, route }: any) {
     };
 
     return (
-        <View className="flex-1 bg-white">
+        <View style={styles.container}>
             {/* Header */}
-            <View className="pt-12 px-6 mb-8">
-                <TouchableOpacity 
-                    className="mb-6"
+            <View style={styles.header}>
+                <TouchableOpacity
+                    style={styles.backButton}
                     onPress={() => navigation.goBack()}
                 >
-                    <Text className="text-2xl">←</Text>
+                    <Text style={styles.backArrow}>←</Text>
                 </TouchableOpacity>
 
-                <Text className="text-2xl font-bold text-gray-800 mb-2">Create new password</Text>
-                <Text className="text-gray-500">
+                <Text style={styles.title}>Create new password</Text>
+                <Text style={styles.subtitle}>
                     Keep your account secure by creating a strong password
                 </Text>
             </View>
 
-            <View className="flex-1 px-6">
+            <View style={styles.body}>
                 {/* New Password Input */}
-                <View className="mb-6">
-                    <View className="relative">
+                <View style={styles.inputWrapper}>
+                    <View style={styles.passwordRow}>
                         <TextInput
-                            className="w-full px-4 py-3 bg-gray-50 rounded-lg border border-gray-200"
+                            style={styles.passwordInput}
                             placeholder="Enter new password"
                             placeholderTextColor="#9CA3AF"
                             secureTextEntry={!showPassword}
@@ -74,18 +74,18 @@ export default function ResetPasswordScreen({ navigation, route }: any) {
                             onChangeText={setNewPassword}
                         />
                         <TouchableOpacity
-                            className="absolute right-4 top-3"
+                            style={styles.eyeButton}
                             onPress={() => setShowPassword(!showPassword)}
                         >
-                            <Text className="text-gray-500">{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                            <Text>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
 
                 {/* Confirm Password Input */}
-                <View className="mb-6">
+                <View style={styles.inputWrapper}>
                     <TextInput
-                        className="w-full px-4 py-3 bg-gray-50 rounded-lg border border-gray-200"
+                        style={styles.input}
                         placeholder="Confirm new password"
                         placeholderTextColor="#9CA3AF"
                         secureTextEntry={!showPassword}
@@ -96,18 +96,93 @@ export default function ResetPasswordScreen({ navigation, route }: any) {
 
                 {/* Create Password Button */}
                 <TouchableOpacity
-                    className="w-full bg-cyan-500 py-4 rounded-lg items-center"
+                    style={[styles.button, { opacity: loading ? 0.6 : 1 }]}
                     onPress={handleResetPassword}
                     disabled={loading}
-                    style={{ opacity: loading ? 0.6 : 1 }}
                 >
                     {loading ? (
                         <ActivityIndicator color="white" />
                     ) : (
-                        <Text className="text-white font-semibold text-base">Create new password</Text>
+                        <Text style={styles.buttonText}>Create new password</Text>
                     )}
                 </TouchableOpacity>
             </View>
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#ffffff',
+    },
+    header: {
+        paddingTop: 48,
+        paddingHorizontal: 24,
+        marginBottom: 32,
+    },
+    backButton: {
+        marginBottom: 24,
+    },
+    backArrow: {
+        fontSize: 24,
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#1f2937',
+        marginBottom: 8,
+    },
+    subtitle: {
+        color: '#6b7280',
+        lineHeight: 22,
+    },
+    body: {
+        flex: 1,
+        paddingHorizontal: 24,
+    },
+    inputWrapper: {
+        marginBottom: 24,
+    },
+    passwordRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f9fafb',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+    },
+    passwordInput: {
+        flex: 1,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        fontSize: 16,
+        color: '#111827',
+    },
+    eyeButton: {
+        paddingHorizontal: 12,
+    },
+    input: {
+        width: '100%',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: '#f9fafb',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        fontSize: 16,
+        color: '#111827',
+    },
+    button: {
+        width: '100%',
+        backgroundColor: '#06b6d4',
+        paddingVertical: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    buttonText: {
+        color: '#ffffff',
+        fontWeight: '600',
+        fontSize: 16,
+    },
+});
