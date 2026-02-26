@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Alert, ScrollView, Modal, FlatList, StyleSheet, } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as SecureStore from 'expo-secure-store';
-import { authApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
@@ -22,6 +21,7 @@ const COUNTRY_CODES = [
 
 /* ---------- SCREEN ---------- */
 export default function SignupScreen({ navigation }: any) {
+  const { register } = useAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
@@ -47,13 +47,7 @@ export default function SignupScreen({ navigation }: any) {
     try {
       setLoading(true);
 
-      const fullName = `${firstName} ${lastName}`;
-      await authApi.register(email, password, fullName);
-
-      const response = await authApi.login(email, password);
-      const { access_token } = response.data;
-
-      await SecureStore.setItemAsync('userToken', access_token);
+      await register(email, password, firstName, lastName);
       navigation.replace('MainTabs');
 
     } catch (error: any) {

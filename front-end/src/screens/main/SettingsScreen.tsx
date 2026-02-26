@@ -11,6 +11,7 @@ import {
 import { colors } from '../../constants/colors';
 import { shared, RADIUS, FONT, SPACING } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { useAuth } from '../../context/AuthContext';
 
 const SETTINGS_ITEMS = [
     { id: 'EditProfile', icon: '👤', label: 'Edit profile', type: 'link' },
@@ -22,7 +23,13 @@ const SETTINGS_ITEMS = [
 ];
 
 export default function SettingsScreen({ navigation }: any) {
+    const { logout } = useAuth();
     const [isDarkMode, setIsDarkMode] = useState(false);
+
+    const handleLogout = async () => {
+        await logout();
+        navigation.replace('Welcome');
+    };
 
     const handlePress = (id: string) => {
         switch (id) {
@@ -89,7 +96,7 @@ export default function SettingsScreen({ navigation }: any) {
                 </View>
 
                 {/* Sign Out Button */}
-                <TouchableOpacity style={styles.signOutBtn}>
+                <TouchableOpacity style={styles.signOutBtn} onPress={handleLogout}>
                     <Text style={styles.signOutText}>Sign out</Text>
                 </TouchableOpacity>
 

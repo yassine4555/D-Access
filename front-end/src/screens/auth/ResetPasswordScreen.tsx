@@ -1,15 +1,21 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
+import { authApi } from '../../services/api';
 
 export default function ResetPasswordScreen({ navigation, route }: any) {
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [token, setToken] = useState(route?.params?.token ?? '');
 
     const email = route?.params?.email || '';
 
     const handleResetPassword = async () => {
+        if (!token) {
+            Alert.alert('Error', 'Missing reset code');
+            return;
+        }
         if (!newPassword || !confirmPassword) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
@@ -27,18 +33,13 @@ export default function ResetPasswordScreen({ navigation, route }: any) {
 
         try {
             setLoading(true);
-            // TODO: Implement password reset API call
-            // await authApi.resetPassword(email, newPassword);
-            
+            await authApi.resetPassword(token, newPassword);
             Alert.alert('Success', 'Password reset successfully', [
-                {
-                    text: 'OK',
-                    onPress: () => navigation.navigate('Login')
-                }
+                { text: 'OK', onPress: () => navigation.navigate('Login') },
             ]);
         } catch (error: any) {
             console.error(error);
-            Alert.alert('Error', 'Failed to reset password');
+            Alert.alert('Error', error?.response?.data?.message ?? 'Failed to reset password');
         } finally {
             setLoading(false);
         }
@@ -62,6 +63,19 @@ export default function ResetPasswordScreen({ navigation, route }: any) {
             </View>
 
             <View style={styles.body}>
+                {/* Reset Code Input */}
+                <View style={styles.inputWrapper}>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Enter reset code"
+                        placeholderTextColor="#9CA3AF"
+                        value={token}
+                        onChangeText={(t) => setToken(t.trim())}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                    />
+                </View>
+
                 {/* New Password Input */}
                 <View style={styles.inputWrapper}>
                     <View style={styles.passwordRow}>

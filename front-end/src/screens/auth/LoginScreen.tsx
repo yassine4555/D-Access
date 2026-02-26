@@ -1,39 +1,51 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Alert, ActivityIndicator, StyleSheet } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
-import { authApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 
 export default function LoginScreen({ navigation }: any) {
+    const { login, loginWithGoogle, loginWithFacebook, loginWithApple, isAuthenticated } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [socialLoading, setSocialLoading] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
+
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigation.replace('MainTabs');
+        }
+    }, [isAuthenticated, navigation]);
 
     const handleLogin = async () => {
         if (!email || !password) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
         }
-
         try {
             setLoading(true);
-            const response = await authApi.login(email, password);
-            const { access_token } = response.data;
-
-            // Save token securely
-            await SecureStore.setItemAsync('userToken', access_token);
-
-            // Navigate to main app
-            navigation.replace('MainTabs');
+            await login(email, password);
         } catch (error: any) {
-            console.error(error);
-            const errorMessage = error.response?.data?.message || 'Login failed';
-            Alert.alert('Error', Array.isArray(errorMessage) ? errorMessage[0] : errorMessage);
+            const msg = error.response?.data?.message || 'Login failed';
+            Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSocialLogin = async (
+        provider: 'google' | 'facebook' | 'apple',
+        action: () => Promise<void>,
+    ) => {
+        try {
+            setSocialLoading(provider);
+            await action();
+        } catch (error: any) {
+            Alert.alert('Error', `${provider} login failed. Please try again.`);
+        } finally {
+            setSocialLoading(null);
         }
     };
 
@@ -100,14 +112,37 @@ export default function LoginScreen({ navigation }: any) {
 
                 {/* Social Login Buttons */}
                 <View style={styles.socialContainer}>
-                    <TouchableOpacity style={[styles.socialButton, { backgroundColor: colors.blue600 }]}>
-                        <Text style={styles.socialButtonText}>f</Text>
+                    <TouchableOpacity
+                        style={[styles.socialButton, { backgroundColor: colors.blue600 }]}
+                        onPress={() => handleSocialLogin('facebook', loginWithFacebook)}
+                        disabled={!!socialLoading}
+                    >
+                        {socialLoading === 'facebook'
+                            ? <ActivityIndicator color={colors.white} />
+                            : <Text style={styles.socialButtonText}>f</Text>
+                        }
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.socialButton, { backgroundColor: colors.red500 }]}>
-                        <Text style={styles.socialButtonText}>G</Text>
+
+                    <TouchableOpacity
+                        style={[styles.socialButton, { backgroundColor: colors.red500 }]}
+                        onPress={() => handleSocialLogin('google', loginWithGoogle)}
+                        disabled={!!socialLoading}
+                    >
+                        {socialLoading === 'google'
+                            ? <ActivityIndicator color={colors.white} />
+                            : <Text style={styles.socialButtonText}>G</Text>
+                        }
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.socialButton, { backgroundColor: 'black' }]}>
-                        <Text style={styles.socialButtonText}></Text>
+
+                    <TouchableOpacity
+                        style={[styles.socialButton, { backgroundColor: 'black' }]}
+                        onPress={() => handleSocialLogin('apple', loginWithApple)}
+                        disabled={!!socialLoading}
+                    >
+                        {socialLoading === 'apple'
+                            ? <ActivityIndicator color={colors.white} />
+                            : <Text style={styles.socialButtonText}></Text>
+                        }
                     </TouchableOpacity>
                 </View>
 

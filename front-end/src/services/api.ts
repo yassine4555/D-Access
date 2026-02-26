@@ -1,20 +1,19 @@
 import axios from 'axios';
-import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { getApiBaseUrl } from '../config/api';
 
-// IMPORTANT: Update this IP to match your PC's local IP address
-// You can find it by running 'ipconfig' in Windows terminal (look for IPv4 Address)
-// For physical device testing, use your PC's IP on the same Wi-Fi network
-const DEV_API_URL = 'http://192.168.1.218:3000'; // Change this to your PC's IP
+const BASE_URL = getApiBaseUrl();
+
+console.log('[API] Base URL configured as:', BASE_URL);
 
 const api = axios.create({
-    baseURL: DEV_API_URL,
+    baseURL: BASE_URL,
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
-// Add a request interceptor to attach the token
+// Attach stored JWT to every request
 api.interceptors.request.use(async (config) => {
     const token = await SecureStore.getItemAsync('userToken');
     if (token) {
@@ -24,8 +23,25 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const authApi = {
-    login: (email: string, password: string) => api.post('/auth/login', { email, password }),
-    register: (email: string, password: string, name?: string) => api.post('/auth/register', { email, password, name }),
+    login:    (email: string, password: string) =>
+        api.post('/auth/login', { email, password }),
+
+    register: (email: string, password: string, firstName: string, lastName: string) =>
+        api.post('/auth/register', { email, password, firstName, lastName }),
+
+    me: (token?: string) =>
+        api.get('/auth/me', {
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }),
+
+    forgotPassword: (email: string) =>
+        api.post('/auth/forgot-password', { email }),
+
+    resetPassword: (token: string, newPassword: string) =>
+        api.post('/auth/reset-password', { token, newPassword }),
+
+    /** Expose base URL so AuthContext can build social OAuth URLs */
+    baseURL: BASE_URL,
 };
 
 export const placesApi = {
@@ -43,6 +59,7 @@ export const postsApi = {
 };
 
 export default api;
+
 
 
 

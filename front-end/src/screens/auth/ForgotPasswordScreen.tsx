@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
+import { authApi } from '../../services/api';
 
 export default function ForgotPasswordScreen({ navigation }: any) {
     const [email, setEmail] = useState('');
@@ -13,12 +14,12 @@ export default function ForgotPasswordScreen({ navigation }: any) {
 
         try {
             setLoading(true);
-            // TODO: Implement password reset API call
-            Alert.alert('Success', 'Password reset code sent to your email');
+            const res = await authApi.forgotPassword(email);
+            Alert.alert('Success', 'A reset code has been sent to your email.');
             navigation.navigate('ResetPassword', { email });
         } catch (error: any) {
             console.error(error);
-            Alert.alert('Error', 'Failed to send reset code');
+            Alert.alert('Error', error?.response?.data?.message ?? 'Failed to send reset code');
         } finally {
             setLoading(false);
         }
