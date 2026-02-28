@@ -48,7 +48,6 @@ export default function SignupScreen({ navigation }: any) {
       setLoading(true);
 
       await register(email, password, firstName, lastName);
-      navigation.replace('MainTabs');
 
     } catch (error: any) {
       const message =

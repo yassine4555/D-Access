@@ -28,7 +28,6 @@ export default function SettingsScreen({ navigation }: any) {
 
     const handleLogout = async () => {
         await logout();
-        navigation.replace('Welcome');
     };
 
     const handlePress = (id: string) => {

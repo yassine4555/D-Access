@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
@@ -6,18 +6,12 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 
 export default function LoginScreen({ navigation }: any) {
-    const { login, loginWithGoogle, loginWithFacebook, loginWithApple, isAuthenticated } = useAuth();
+    const { login, loginWithGoogle, loginWithFacebook, loginWithApple } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [socialLoading, setSocialLoading] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
-
-    useEffect(() => {
-        if (isAuthenticated) {
-            navigation.replace('MainTabs');
-        }
-    }, [isAuthenticated, navigation]);
 
     const handleLogin = async () => {
         if (!email || !password) {
