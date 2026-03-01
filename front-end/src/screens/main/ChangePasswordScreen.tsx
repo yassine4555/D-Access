@@ -10,8 +10,9 @@ import {
 } from 'react-native';
 import { colors } from '../../constants/colors';
 import { shared, RADIUS, FONT, SPACING } from '../../constants/sharedStyles';
+import { SettingsScreenProps } from '../../types/navigation';
 
-export default function ChangePasswordScreen({ navigation }: any) {
+export default function ChangePasswordScreen({ navigation }: SettingsScreenProps<'ChangePassword'>) {
     const [oldPassword, setOldPassword] = useState('••••••••');
     const [newPassword, setNewPassword] = useState('••••••••');
     const [confirmPassword, setConfirmPassword] = useState('••••••••');

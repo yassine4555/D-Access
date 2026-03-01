@@ -10,6 +10,7 @@ import {
     Dimensions,
 } from 'react-native';
 import { colors } from '../../constants/colors';
+import { MapScreenProps } from '../../types/navigation';
 
 const { width } = Dimensions.get('window');
 
@@ -18,7 +19,7 @@ const MOCK_PHOTOS = [
     'https://images.unsplash.com/photo-1580894908361-967195033215?w=200&h=200&fit=crop',
 ];
 
-export default function ReportDetailsScreen({ navigation, route }: any) {
+export default function ReportDetailsScreen({ navigation, route }: MapScreenProps<'ReportDetails'>) {
     const report = route?.params?.report;
 
     return (

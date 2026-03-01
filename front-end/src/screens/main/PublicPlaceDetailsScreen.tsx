@@ -10,6 +10,7 @@ import {
     StatusBar,
 } from 'react-native';
 import { colors } from '../../constants/colors';
+import { HomeScreenProps } from '../../types/navigation';
 
 const { width } = Dimensions.get('window');
 
@@ -27,7 +28,7 @@ const MOCK_PHOTOS = [
     'https://images.unsplash.com/photo-1453614512568-c4024d13c247?w=200&h=200&fit=crop',
 ];
 
-export default function PublicPlaceDetailsScreen({ navigation }: any) {
+export default function PublicPlaceDetailsScreen({ navigation }: HomeScreenProps<'PublicPlaceDetails'>) {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" />

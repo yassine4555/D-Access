@@ -11,6 +11,7 @@ import {
 import { colors } from '../../constants/colors';
 import { shared, SPACING, RADIUS, FONT, SEMANTIC_COLORS } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { SettingsScreenProps } from '../../types/navigation';
 
 const { width } = Dimensions.get('window');
 
@@ -25,7 +26,7 @@ const SAVED_FOR_LATER = [
     { id: '5', name: 'Favorite Cafe', address: '123 Oak Street, Montreal' },
 ];
 
-export default function FavoritesScreen({ navigation }: any) {
+export default function FavoritesScreen({ navigation }: SettingsScreenProps<'Favorites'>) {
     const [activeTab, setActiveTab] = useState('Places');
 
     return (

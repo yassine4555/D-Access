@@ -13,10 +13,11 @@ import {
 import { colors } from '../../constants/colors';
 import { shared, RADIUS, FONT, SPACING } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { SettingsScreenProps } from '../../types/navigation';
 
 const { width } = Dimensions.get('window');
 
-export default function EditProfileScreen({ navigation }: any) {
+export default function EditProfileScreen({ navigation }: SettingsScreenProps<'EditProfile'>) {
     const [firstName, setFirstName] = useState('John');
     const [lastName, setLastName] = useState('Doe');
     const [phone, setPhone] = useState('123 456 789');

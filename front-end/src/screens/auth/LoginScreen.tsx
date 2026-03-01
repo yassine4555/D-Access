@@ -4,8 +4,9 @@ import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { RootScreenProps } from '../../types/navigation';
 
-export default function LoginScreen({ navigation }: any) {
+export default function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
     const { login, loginWithGoogle, loginWithFacebook, loginWithApple } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');

@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import * as dns from 'dns';
 import cookieParser from 'cookie-parser';
@@ -8,6 +9,12 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }));
 
   // Enable cookie parsing - REQUIRED for OAuth redirect URI handling
   app.use(cookieParser());

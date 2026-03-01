@@ -4,7 +4,7 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { placesApi } from '../../services/api';
 
-export default function DiscoveryScreen({ navigation }: any) {
+export default function DiscoveryScreen() {
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [places, setPlaces] = useState<any[]>([]);

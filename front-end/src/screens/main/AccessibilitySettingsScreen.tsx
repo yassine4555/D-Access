@@ -11,6 +11,7 @@ import {
 import { colors } from '../../constants/colors';
 import { shared, RADIUS, FONT, SPACING } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { SettingsScreenProps } from '../../types/navigation';
 
 const ACCESSIBILITY_OPTIONS = [
     { id: 'LargeText', label: 'Large Text', description: 'Increase the font size for better readability.' },
@@ -19,7 +20,7 @@ const ACCESSIBILITY_OPTIONS = [
     { id: 'HapticFeedback', label: 'Haptic Feedback', description: 'Vibrate the device on interaction.' },
 ];
 
-export default function AccessibilitySettingsScreen({ navigation }: any) {
+export default function AccessibilitySettingsScreen({ navigation }: SettingsScreenProps<'AccessibilitySettings'>) {
     const [settings, setSettings] = useState<Record<string, boolean>>({
         LargeText: false,
         HighContrast: false,

@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { colors } from '../../constants/colors';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { HomeScreenProps } from '../../types/navigation';
 
-export default function WriteReviewScreen({ navigation, route }: any) {
+export default function WriteReviewScreen({ navigation, route }: HomeScreenProps<'WriteReview'>) {
     const [rating, setRating] = useState(0);
     const [reviewText, setReviewText] = useState('');
     const place = route?.params?.place;

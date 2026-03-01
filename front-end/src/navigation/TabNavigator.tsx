@@ -23,11 +23,12 @@ import { MarketplaceIcon } from '../components/icons/Marketplaceicon';
 import { MapIcon } from '../components/icons/Mapicon';
 import { HomeIcon } from '../components/icons/Homeicon';
 import { SvgProps } from 'react-native-svg/lib/typescript/elements/Svg';
+import { HomeStackParamList, MapStackParamList, SettingsStackParamList, TabParamList } from '../types/navigation';
 
-const Tab = createBottomTabNavigator();
-const HomeStack = createNativeStackNavigator();
-const MapStack = createNativeStackNavigator();
-const SettingsStack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator<TabParamList>();
+const HomeStack = createNativeStackNavigator<HomeStackParamList>();
+const MapStack = createNativeStackNavigator<MapStackParamList>();
+const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
 const TAB_ICONS: Record<string, React.FC<SvgProps>> = {
     Home: HomeIcon,

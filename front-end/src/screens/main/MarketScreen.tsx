@@ -12,6 +12,7 @@ import {
 import { colors } from '../../constants/colors';
 import { shared, SPACING, RADIUS, FONT, SEMANTIC_COLORS } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { TabScreenProps } from '../../types/navigation';
 
 const PRODUCTS = [
     {
@@ -30,7 +31,7 @@ const PRODUCTS = [
     },
 ];
 
-export default function MarketplaceScreen({ navigation }: any) {
+export default function MarketplaceScreen({ navigation }: TabScreenProps<'Marketplace'>) {
     return (
         <View style={shared.container}>
             <StatusBar barStyle="dark-content" backgroundColor={colors.white} />

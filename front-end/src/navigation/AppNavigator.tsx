@@ -9,8 +9,9 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
 import TabNavigator from './TabNavigator';
 import { useAuth } from '../context/AuthContext';
+import { RootStackParamList } from '../types/navigation';
 
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
     const { isAuthenticated, isLoading } = useAuth();

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { authApi } from '../../services/api';
+import { RootScreenProps } from '../../types/navigation';
 
-export default function ForgotPasswordScreen({ navigation }: any) {
+export default function ForgotPasswordScreen({ navigation }: RootScreenProps<'ForgotPassword'>) {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
 

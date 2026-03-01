@@ -11,6 +11,7 @@ import {
     StatusBar,
 } from 'react-native';
 import { colors } from '../../constants/colors';
+import { HomeScreenProps } from '../../types/navigation';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.7;
@@ -68,7 +69,7 @@ const MOCK_BLOGS = [
     },
 ];
 
-export default function HomeScreen({ navigation }: any) {
+export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) {
     const [activeFilter, setActiveFilter] = useState('All');
     const [activeCategory, setActiveCategory] = useState<'Places' | 'Blogs'>('Places');
 

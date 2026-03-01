@@ -1,5 +1,5 @@
 import {
-    Body, Controller, Get, Post, Req, Res, UseGuards, Query,
+    Body, Controller, Get, Post, Req, Res, UseGuards, Query, UnauthorizedException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
@@ -7,6 +7,10 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 // Default deep link for standalone apps
 const DEFAULT_DEEP_LINK = 'daccess://auth/callback';
@@ -30,12 +34,12 @@ export class AuthController {
 
     // ── Email / password ────────────────────────────────────────────────────
     @Post('login')
-    async login(@Body() body: any) {
+    async login(@Body() body: LoginDto) {
         console.log('🔵 [AUTH] POST /auth/login - Request:', { email: body.email });
         const user = await this.authService.validateUser(body.email, body.password);
         if (!user) {
             console.log('❌ [AUTH] POST /auth/login - Invalid credentials');
-            return { message: 'Invalid credentials' };
+            throw new UnauthorizedException('Invalid credentials');
         }
         const result = await this.authService.login(user);
         console.log('✅ [AUTH] POST /auth/login - Success:', { userId: user._id, email: user.email });
@@ -43,7 +47,7 @@ export class AuthController {
     }
 
     @Post('register')
-    async register(@Body() body: any) {
+    async register(@Body() body: RegisterDto) {
         console.log('🔵 [AUTH] POST /auth/register - Request:', { email: body.email, firstName: body.firstName, lastName: body.lastName });
         const result = await this.authService.register(body);
         console.log('✅ [AUTH] POST /auth/register - Success:', { userId: (result.user as any)._id, email: result.user.email });
@@ -51,12 +55,12 @@ export class AuthController {
     }
 
     @Post('forgot-password')
-    async forgotPassword(@Body() body: any) {
+    async forgotPassword(@Body() body: ForgotPasswordDto) {
         return this.authService.forgotPassword(body.email);
     }
 
     @Post('reset-password')
-    async resetPassword(@Body() body: any) {
+    async resetPassword(@Body() body: ResetPasswordDto) {
         return this.authService.resetPassword(body.token, body.newPassword);
     }
 

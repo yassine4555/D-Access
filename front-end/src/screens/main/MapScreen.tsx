@@ -12,6 +12,7 @@ import {
 import MapView, { Marker } from 'react-native-maps';
 import { colors } from '../../constants/colors';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { MapScreenProps } from '../../types/navigation';
 
 const FILTER_CHIPS = ['All', 'Entrance', 'Toilet', 'Elevator', 'Parking'];
 
@@ -64,7 +65,7 @@ const MOCK_REPORTS = [
     },
 ];
 
-export default function MapScreen({ navigation }: any) {
+export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
     const [activeFilter, setActiveFilter] = useState('All');
 
     return (

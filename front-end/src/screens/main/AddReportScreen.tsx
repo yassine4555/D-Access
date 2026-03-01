@@ -10,10 +10,11 @@ import {
 } from 'react-native';
 import { colors } from '../../constants/colors';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { MapScreenProps } from '../../types/navigation';
 
 const CATEGORIES = ['Not accessible', 'Partially accessible', 'Accessible'];
 
-export default function AddReportScreen({ navigation }: any) {
+export default function AddReportScreen({ navigation }: MapScreenProps<'AddReport'>) {
     const [category, setCategory] = useState('Not accessible');
     const [showDropdown, setShowDropdown] = useState(false);
     const [tags, setTags] = useState<string[]>(['Steps']);

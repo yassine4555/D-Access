@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { colors } from '../../constants/colors';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { HomeScreenProps } from '../../types/navigation';
 
 const { width } = Dimensions.get('window');
 
@@ -49,7 +50,7 @@ const MOCK_REVIEWS = [
     },
 ];
 
-export default function PlaceDetailsScreen({ navigation, route }: any) {
+export default function PlaceDetailsScreen({ navigation, route }: HomeScreenProps<'PlaceDetails'>) {
     const place = route?.params?.place;
 
     return (

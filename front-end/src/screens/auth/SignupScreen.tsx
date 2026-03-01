@@ -9,6 +9,7 @@ import { Checkbox } from '../../components/common/Checkbox';
 import { BackIcon } from '../../components/icons/BackIcon';
 import { EyeIcon } from '../../components/icons/EyeIcon';
 import { CaretDownIcon } from '../../components/icons/CaretDownIcon';
+import { RootScreenProps } from '../../types/navigation';
 
 /* ---------- COUNTRY LIST ---------- */
 const COUNTRY_CODES = [
@@ -20,7 +21,7 @@ const COUNTRY_CODES = [
 ];
 
 /* ---------- SCREEN ---------- */
-export default function SignupScreen({ navigation }: any) {
+export default function SignupScreen({ navigation }: RootScreenProps<'Signup'>) {
   const { register } = useAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');

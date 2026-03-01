@@ -3,8 +3,9 @@ import { View, Text, TouchableOpacity, Image, StyleSheet, StatusBar } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../constants/colors';
+import { RootScreenProps } from '../../types/navigation';
 
-export default function WelcomeScreen({ navigation }: any) {
+export default function WelcomeScreen({ navigation }: RootScreenProps<'Welcome'>) {
   return (
     <LinearGradient
       colors={[colors.cyan500, colors.blue500]}

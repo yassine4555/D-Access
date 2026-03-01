@@ -12,6 +12,7 @@ import { colors } from '../../constants/colors';
 import { shared, RADIUS, FONT, SPACING } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
 import { useAuth } from '../../context/AuthContext';
+import { SettingsScreenProps } from '../../types/navigation';
 
 const SETTINGS_ITEMS = [
     { id: 'EditProfile', icon: '👤', label: 'Edit profile', type: 'link' },
@@ -22,7 +23,7 @@ const SETTINGS_ITEMS = [
     { id: 'Help', icon: '❓', label: 'Get help', type: 'link' },
 ];
 
-export default function SettingsScreen({ navigation }: any) {
+export default function SettingsScreen({ navigation }: SettingsScreenProps<'SettingsMain'>) {
     const { logout } = useAuth();
     const [isDarkMode, setIsDarkMode] = useState(false);
 

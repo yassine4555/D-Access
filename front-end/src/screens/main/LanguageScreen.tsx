@@ -11,13 +11,14 @@ import {
 import { colors } from '../../constants/colors';
 import { shared, RADIUS, FONT, SPACING } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { SettingsScreenProps } from '../../types/navigation';
 
 const LANGUAGES = [
     { id: 'fr', label: 'French' },
     { id: 'en-uk', label: 'English (UK)' },
 ];
 
-export default function LanguageScreen({ navigation }: any) {
+export default function LanguageScreen({ navigation }: SettingsScreenProps<'Language'>) {
     const [selectedId, setSelectedId] = useState('en-uk');
     const [searchQuery, setSearchQuery] = useState('');
 
