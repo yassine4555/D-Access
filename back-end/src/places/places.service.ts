@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import axios from 'axios';
-import { Model } from 'mongoose';
+import { Model, PipelineStage } from 'mongoose';
 import { NearbyPlacesDto } from './dto/nearby-places.dto';
 import { SeedPlacesDto } from './dto/seed-places.dto';
+import { OverpassClient } from './overpass.client';
 import { Place, PlaceDocument } from './schemas/place.schema';
 
 type OverpassElement = {
@@ -34,40 +34,79 @@ type NormalizedPlace = {
   updatedAt: Date;
 };
 
+type NearbyAggregateResult = {
+  data: Array<Record<string, unknown>>;
+  totalCount: Array<{ count: number }>;
+};
+
 @Injectable()
 export class PlacesService {
+  private readonly logger = new Logger(PlacesService.name);
+
   constructor(
     @InjectModel(Place.name)
     private readonly placeModel: Model<PlaceDocument>,
+    private readonly overpassClient: OverpassClient,
   ) {}
 
   async findNearby(query: NearbyPlacesDto) {
     const radius = query.radius ?? 3000;
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
 
-    const filter: Record<string, unknown> = {
-      location: {
-        $near: {
-          $geometry: {
+    const matchStage: Record<string, unknown> = {};
+    if (query.category) {
+      matchStage.category = query.category;
+    }
+    if (query.wheelchair) {
+      matchStage['accessibility.wheelchair'] = query.wheelchair;
+    }
+
+    const pipeline: PipelineStage[] = [
+      {
+        $geoNear: {
+          near: {
             type: 'Point',
             coordinates: [query.lon, query.lat],
           },
-          $maxDistance: radius,
+          distanceField: 'distanceMeters',
+          maxDistance: radius,
+          spherical: true,
         },
       },
-    };
+      ...(Object.keys(matchStage).length > 0 ? [{ $match: matchStage }] : []),
+      {
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                _id: 0,
+                sourceId: 1,
+                source: 1,
+                osmType: 1,
+                osmId: 1,
+                name: 1,
+                category: 1,
+                location: 1,
+                accessibility: 1,
+                distanceMeters: { $round: ['$distanceMeters', 0] },
+                updatedAt: 1,
+              },
+            },
+          ],
+          totalCount: [{ $count: 'count' }],
+        },
+      },
+    ];
 
-    if (query.category) {
-      filter.category = query.category;
-    }
-
-    const skip = (page - 1) * limit;
-
-    const [items, total] = await Promise.all([
-      this.placeModel.find(filter).skip(skip).limit(limit).lean().exec(),
-      this.placeModel.countDocuments(filter).exec(),
-    ]);
+    const [result] = await this.placeModel
+      .aggregate<NearbyAggregateResult>(pipeline)
+      .exec();
+    const items = result?.data ?? [];
+    const total = result?.totalCount?.[0]?.count ?? 0;
 
     return {
       data: items,
@@ -82,29 +121,18 @@ export class PlacesService {
 
   async seedFromOverpass(input: SeedPlacesDto) {
     const radius = input.radius ?? 2500;
-    const overpassQuery = `
-[out:json][timeout:45];
-(
-  nwr(around:${radius},${input.lat},${input.lon})[amenity];
-  nwr(around:${radius},${input.lat},${input.lon})[shop];
-  nwr(around:${radius},${input.lat},${input.lon})[tourism];
-  nwr(around:${radius},${input.lat},${input.lon})[leisure];
-);
-out center tags qt;
-`;
-
-    const response = await axios.get<{ elements: OverpassElement[] }>(
-      'https://overpass-api.de/api/interpreter',
-      {
-        params: { data: overpassQuery },
-        timeout: 60000,
-      },
+    const elements = await this.overpassClient.queryPlaces(
+      input.lat,
+      input.lon,
+      radius,
     );
-
-    const elements = response.data.elements ?? [];
     const normalizedDocs: NormalizedPlace[] = elements
       .map((element) => this.normalizeElement(element))
       .filter((doc): doc is NormalizedPlace => doc !== null);
+
+    this.logger.log(
+      `Overpass fetch completed: fetched=${elements.length}, valid=${normalizedDocs.length}`,
+    );
 
     const operations = normalizedDocs.map((doc) => ({
       updateOne: {

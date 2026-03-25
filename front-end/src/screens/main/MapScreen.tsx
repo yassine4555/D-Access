@@ -1,542 +1,933 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-    View,
-    Text,
-    ScrollView,
-    TouchableOpacity,
-    TextInput,
-    Image,
-    StyleSheet,
-    StatusBar,
+  ActivityIndicator,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import MapView, { Marker, UrlTile } from 'react-native-maps';
+import MapView, { Marker, Region, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { authApi, placesApi } from '../../services/api';
 import { colors } from '../../constants/colors';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { BookmarkIcon } from '../../components/icons/BookmarkIcon';
+import { ChipsIcon } from '../../components/icons/ChipsIcon';
+import { FilterIcon } from '../../components/icons/FilterIcon';
+import { MicrophoneIcon } from '../../components/icons/MicrophoneIcon';
+import { TargetPositionIcon } from '../../components/icons/TargetPositionIcon';
 import { MapScreenProps } from '../../types/navigation';
+import { SearchIcon } from '../../components/icons/searchIcon';
 
-const FILTER_CHIPS = ['All', 'Entrance', 'Toilet', 'Elevator', 'Parking'];
-const FALLBACK_REGION = {
-    latitude: 36.7538,
-    longitude: 3.0588,
-    latitudeDelta: 0.02,
-    longitudeDelta: 0.02,
+type NearbyPlace = {
+  sourceId: string;
+  name?: string;
+  category?: string;
+  location: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
+  distanceMeters?: number;
 };
 
-const MOCK_NEARBY_PLACES = [
-    {
-        id: '1',
-        name: 'Coffee VI',
-        distance: '0.7Km',
-        rating: 4.8,
-        reviews: 74,
-        image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=100&h=100&fit=crop',
-    },
-    {
-        id: '2',
-        name: 'Coffee VI',
-        distance: '0.7Km',
-        rating: 4.8,
-        reviews: 74,
-        image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=100&h=100&fit=crop',
-    },
-];
+type ReportItem = {
+  id: string;
+  name: string;
+  status: 'accessible' | 'partial' | 'inaccessible';
+  submittedAgo: string;
+  distance: string;
+};
 
-const MOCK_REPORTS = [
-    {
-        id: '1',
-        status: 'Accessible',
-        statusColor: '#10B981',
-        statusBg: '#D1FAE5',
-        name: 'Hotel st Julian',
-        time: 'Submitted 2 Days ago',
-        distance: '350 ft away',
-    },
-    {
-        id: '2',
-        status: 'Partially Accessible',
-        statusColor: '#F59E0B',
-        statusBg: '#FEF3C7',
-        name: 'Hotel st Julian',
-        time: 'Submitted 2 Days ago',
-        distance: '350 ft away',
-    },
-    {
-        id: '3',
-        status: 'Not Accessible',
-        statusColor: '#EF4444',
-        statusBg: '#FEE2E2',
-        name: 'Hotel st Julian',
-        time: 'Submitted 2 Days ago',
-        distance: '350 ft away',
-    },
-];
+const FILTER_CHIPS = ['All', 'Entrance', 'Toilet', 'Elevator', 'Parking'];
+
+const CHIP_TO_CATEGORY: Record<string, string | undefined> = {
+  All: undefined,
+  Entrance: 'entrance',
+  Toilet: 'toilets',
+  Elevator: 'elevator',
+  Parking: 'parking',
+};
+
+const FALLBACK_REGION: Region = {
+  latitude: 35.4162835,
+  longitude: 10.9987172,
+  latitudeDelta: 0.04,
+  longitudeDelta: 0.04,
+};
+
+const DEFAULT_RADIUS_METERS = 5000;
+const DEFAULT_LIMIT = 30;
+const TILE_URL_TEMPLATE =
+  process.env.EXPO_PUBLIC_TILE_URL ||
+  'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+
+function formatDistance(distanceMeters?: number): string {
+  if (typeof distanceMeters !== 'number') return '';
+  if (distanceMeters < 1000) return `${Math.round(distanceMeters)} m`;
+  return `${(distanceMeters / 1000).toFixed(1)} Km`;
+}
+
+const BADGE_STYLES: Record<
+  ReportItem['status'],
+  { bg: string; text: string; label: string }
+> = {
+  accessible: { bg: '#DCFCE7', text: '#247F46', label: 'Accessible' },
+  partial: { bg: '#FEF3C7', text: '#F59E0B', label: 'Partially Accessible' },
+  inaccessible: { bg: '#FEE2E2', text: '#DC2626', label: 'Not Accessible' },
+};
 
 export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
-    const [activeFilter, setActiveFilter] = useState('All');
-    const [mapRegion, setMapRegion] = useState(FALLBACK_REGION);
+  const [mapRegion, setMapRegion] = useState<Region>(FALLBACK_REGION);
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [places, setPlaces] = useState<NearbyPlace[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const [lastErrorDetail, setLastErrorDetail] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  // Reports will be populated once a reports API is available
+  const [reports] = useState<ReportItem[]>([]);
 
-    useEffect(() => {
-        let isMounted = true;
+  const mapRef = useRef<MapView | null>(null);
+  const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRegionRef = useRef<Region>(FALLBACK_REGION);
 
-        const resolveUserLocation = async () => {
-            try {
-                const { status } = await Location.requestForegroundPermissionsAsync();
+  const hasMeaningfulRegionChange = (nextRegion: Region) => {
+    const previous = lastRegionRef.current;
+    const latDelta = Math.abs(previous.latitude - nextRegion.latitude);
+    const lonDelta = Math.abs(previous.longitude - nextRegion.longitude);
+    // Ignore tiny camera drift values that can spam rerenders/fetches.
+    return latDelta > 0.0005 || lonDelta > 0.0005;
+  };
 
-                if (status !== 'granted') {
-                    return;
-                }
+  const fetchPlaces = async (region: Region, category?: string) => {
+    setIsLoading(true);
+    setErrorText(null);
+    setLastErrorDetail(null);
 
-                const currentPosition = await Location.getCurrentPositionAsync({});
-                if (!isMounted) {
-                    return;
-                }
+    try {
+      const response = await placesApi.findNearby(
+        region.latitude,
+        region.longitude,
+        DEFAULT_RADIUS_METERS,
+        1,
+        DEFAULT_LIMIT,
+        category,
+      );
 
-                setMapRegion({
-                    latitude: currentPosition.coords.latitude,
-                    longitude: currentPosition.coords.longitude,
-                    latitudeDelta: 0.02,
-                    longitudeDelta: 0.02,
-                });
-            } catch {
-            }
+      const data = response?.data?.data;
+      if (Array.isArray(data)) {
+        setPlaces(
+          data.sort(
+            (a: NearbyPlace, b: NearbyPlace) =>
+              (a.distanceMeters ?? Number.MAX_SAFE_INTEGER) -
+              (b.distanceMeters ?? Number.MAX_SAFE_INTEGER),
+          ),
+        );
+      } else {
+        setPlaces([]);
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown fetch error';
+      setErrorText('Unable to load nearby places right now.');
+      setLastErrorDetail(errorMessage);
+      setPlaces([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const debugError = errorText
+    ? `${errorText}${lastErrorDetail ? ` (${lastErrorDetail})` : ''}`
+    : 'none';
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const resolveUserLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+
+        if (status !== 'granted') {
+          await fetchPlaces(FALLBACK_REGION, undefined);
+          return;
+        }
+
+        const current = await Location.getCurrentPositionAsync({});
+        if (!isMounted) {
+          return;
+        }
+
+        const nextRegion: Region = {
+          latitude: current.coords.latitude,
+          longitude: current.coords.longitude,
+          latitudeDelta: 0.04,
+          longitudeDelta: 0.04,
         };
 
-        resolveUserLocation();
+        setMapRegion(nextRegion);
+        mapRef.current?.animateToRegion(nextRegion, 500);
+        await fetchPlaces(nextRegion, undefined);
+      } catch {
+        await fetchPlaces(FALLBACK_REGION, undefined);
+      }
+    };
 
-        return () => {
-            isMounted = false;
-        };
-    }, []);
+    void resolveUserLocation();
 
-    return (
-        <View style={styles.container}>
-            <StatusBar barStyle="dark-content" />
+    return () => {
+      isMounted = false;
+      if (fetchTimerRef.current) {
+        clearTimeout(fetchTimerRef.current);
+      }
+    };
+  }, []);
 
-            {/* Interactive Map */}
-            <View style={styles.mapContainer}>
-                <MapView
-                    style={styles.map}
-                    region={mapRegion}
-                    onRegionChangeComplete={setMapRegion}
-                    showsUserLocation
-                    showsMyLocationButton={false}
-                    mapType="none"
-                >
-                    <UrlTile
-                        urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        maximumZ={19}
-                        flipY={false}
-                    />
-                    <Marker
-                        coordinate={{ latitude: 36.7538, longitude: 3.0588 }}
-                        title="Coffee VI"
-                        description="0.7Km away"
-                    />
-                </MapView>
+  useEffect(() => {
+    const category = CHIP_TO_CATEGORY[activeFilter];
+    void fetchPlaces(mapRegion, category);
+  }, [activeFilter]);
 
-                {/* Back button */}
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.floatingButton, { position: 'absolute', top: 45, left: 16, zIndex: 10 }]}>
-                          <BackIcon color={colors.gray900} />
-                </TouchableOpacity>
+  const onRegionChangeComplete = (region: Region) => {
+    if (!hasMeaningfulRegionChange(region)) {
+      return;
+    }
 
-                {/* Bookmark */}
-                <TouchableOpacity style={styles.mapBookmarkBtn}>
-                    <Text style={styles.bookmarkIcon}>🔖</Text>
-                </TouchableOpacity>
+    lastRegionRef.current = region;
+    setMapRegion(region);
 
-                {/* Locate button */}
-                <TouchableOpacity style={styles.locateBtn}>
-                    <Text style={styles.locateIcon}>◎</Text>
-                </TouchableOpacity>
+    if (fetchTimerRef.current) {
+      clearTimeout(fetchTimerRef.current);
+    }
 
-                {/* Report button */}
-                <TouchableOpacity
-                    style={styles.reportBtn}
-                    onPress={() => navigation.navigate('AddReport')}
-                >
-                    <Text style={styles.reportBtnText}>+ Report</Text>
-                </TouchableOpacity>
+    fetchTimerRef.current = setTimeout(() => {
+      const category = CHIP_TO_CATEGORY[activeFilter];
+      void fetchPlaces(region, category);
+    }, 600);
+  };
 
-                <View style={styles.attributionWrap}>
-                    <Text style={styles.attributionText}>© OpenStreetMap contributors</Text>
-                </View>
-            </View>
+  const centerOnUserOrFallback = async () => {
+    try {
+      const current = await Location.getCurrentPositionAsync({});
+      const nextRegion: Region = {
+        latitude: current.coords.latitude,
+        longitude: current.coords.longitude,
+        latitudeDelta: 0.04,
+        longitudeDelta: 0.04,
+      };
 
-            {/* Drag handle */}
-            <View style={styles.handleRow}>
-                <View style={styles.handle} />
-            </View>
+      setMapRegion(nextRegion);
+      lastRegionRef.current = nextRegion;
+      mapRef.current?.animateToRegion(nextRegion, 500);
+      const category = CHIP_TO_CATEGORY[activeFilter];
+      await fetchPlaces(nextRegion, category);
+    } catch {
+      setMapRegion(FALLBACK_REGION);
+      lastRegionRef.current = FALLBACK_REGION;
+      mapRef.current?.animateToRegion(FALLBACK_REGION, 500);
+      const category = CHIP_TO_CATEGORY[activeFilter];
+      await fetchPlaces(FALLBACK_REGION, category);
+    }
+  };
 
-            {/* Bottom Panel */}
-            <ScrollView style={styles.bottomPanel} showsVerticalScrollIndicator={false}>
-                {/* Search */}
-                <View style={styles.searchRow}>
-                    <View style={styles.searchBar}>
-                        <Text style={styles.searchIcon}>🔍</Text>
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder="Search"
-                            placeholderTextColor={colors.gray400}
-                        />
-                        <TouchableOpacity>
-                            <Text style={{ fontSize: 18, color: colors.gray400 }}>🎤</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <TouchableOpacity style={styles.filterButton}>
-                        <Text style={{ color: colors.white, fontSize: 16 }}>☰</Text>
-                    </TouchableOpacity>
-                </View>
+  // Client-side search filter on top of API results
+  const filteredPlaces = searchQuery.trim()
+    ? places.filter((p) =>
+        (p.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : places;
 
-                {/* Filter Chips */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ marginBottom: 16 }}
-                    contentContainerStyle={{ paddingHorizontal: 16 }}
-                >
-                    {FILTER_CHIPS.map((chip) => (
-                        <TouchableOpacity
-                            key={chip}
-                            style={[styles.chip, activeFilter === chip && styles.chipActive]}
-                            onPress={() => setActiveFilter(chip)}
-                        >
-                            {chip === 'All' && <Text style={{ fontSize: 10, marginRight: 4 }}>⊞</Text>}
-                            <Text style={[styles.chipText, activeFilter === chip && styles.chipTextActive]}>
-                                {chip}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-
-                {/* Nearby Accessible Places */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Nearby Accessible Places</Text>
-                    <TouchableOpacity>
-                        <Text style={styles.seeAll}>See all</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {MOCK_NEARBY_PLACES.map((place) => (
-                    <TouchableOpacity
-                        key={place.id}
-                        style={styles.placeRow}
-                        onPress={() => navigation.navigate('PlaceDetails', { place })}
-                    >
-                        <Image source={{ uri: place.image }} style={styles.placeThumb} />
-                        <View style={styles.placeRowInfo}>
-                            <Text style={styles.placeRowName}>{place.name}</Text>
-                            <View style={styles.placeRowMeta}>
-                                <Text style={styles.placeRowDistance}>{place.distance}</Text>
-                                <Text style={styles.placeRowRating}>{place.rating}</Text>
-                                <Text style={{ color: '#F59E0B', fontSize: 12 }}>★</Text>
-                                <Text style={styles.placeRowReviews}>({place.reviews})</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity>
-                            <Text style={{ color: colors.primary, fontSize: 18 }}>♡</Text>
-                        </TouchableOpacity>
-                    </TouchableOpacity>
-                ))}
-
-                {/* Reports Nearby */}
-                <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-                    <Text style={styles.sectionTitle}>Reports Nearby</Text>
-                    <TouchableOpacity>
-                        <Text style={styles.seeAll}>See all</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {MOCK_REPORTS.map((report) => (
-                    <TouchableOpacity
-                        key={report.id}
-                        style={styles.reportCard}
-                        onPress={() => navigation.navigate('ReportDetails', { report })}
-                    >
-                        <View style={[styles.statusBadge, { backgroundColor: report.statusBg }]}>
-                            <Text style={{ fontSize: 12, marginRight: 4 }}>♿</Text>
-                            <Text style={[styles.statusText, { color: report.statusColor }]}>
-                                {report.status}
-                            </Text>
-                        </View>
-                        <Text style={styles.reportName}>{report.name}</Text>
-                        <Text style={styles.reportMeta}>
-                            {report.time} • {report.distance}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
-
-                <View style={{ height: 30 }} />
-            </ScrollView>
-        </View>
+  const zoomIn = () => {
+    mapRef.current?.animateToRegion(
+      {
+        ...lastRegionRef.current,
+        latitudeDelta: lastRegionRef.current.latitudeDelta * 0.5,
+        longitudeDelta: lastRegionRef.current.longitudeDelta * 0.5,
+      },
+      200,
     );
+  };
+
+  const zoomOut = () => {
+    mapRef.current?.animateToRegion(
+      {
+        ...lastRegionRef.current,
+        latitudeDelta: lastRegionRef.current.latitudeDelta * 2,
+        longitudeDelta: lastRegionRef.current.longitudeDelta * 2,
+      },
+      200,
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* ── MAP ── */}
+      <View style={styles.mapContainer}>
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          initialRegion={FALLBACK_REGION}
+          onRegionChangeComplete={onRegionChangeComplete}
+          showsUserLocation
+          showsMyLocationButton={false}
+          mapType="none"
+        >
+          <UrlTile urlTemplate={TILE_URL_TEMPLATE} maximumZ={19} flipY={false} />
+          {filteredPlaces.map((place) => {
+            const [lng, lat] = place.location.coordinates;
+            return (
+              <Marker
+                key={place.sourceId}
+                coordinate={{ latitude: lat, longitude: lng }}
+                title={place.name || 'Unnamed place'}
+                description={formatDistance(place.distanceMeters)}
+                onPress={() =>
+                  navigation.navigate('PlaceDetails', {
+                    place: {
+                      id: place.sourceId,
+                      name: place.name || 'Unnamed place',
+                      distance: formatDistance(place.distanceMeters),
+                    },
+                  })
+                }
+              />
+            );
+          })}
+        </MapView>
+
+        {/* Back */}
+        <TouchableOpacity
+          style={[styles.floatingBtn, { top: 20, left: 16 }]}
+          onPress={() => navigation.goBack()}
+        >
+          <BackIcon color={colors.gray900} />
+        </TouchableOpacity>
+
+        {/* Bookmark */}
+        <TouchableOpacity style={[styles.floatingBtn, { top: 20, right: 16 }]}>
+          <BookmarkIcon color={colors.gray900} />
+        </TouchableOpacity>
+
+        {/* Zoom controls */}
+        <View style={styles.mapZoomBox}>
+          <TouchableOpacity style={styles.mapCtrlBtn} onPress={zoomIn}>
+            <Text style={styles.mapCtrlText}>+</Text>
+          </TouchableOpacity>
+          <View style={styles.mapCtrlDivider} />
+          <TouchableOpacity style={styles.mapCtrlBtn} onPress={zoomOut}>
+            <Text style={styles.mapCtrlText}>−</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Locate button */}
+        <TouchableOpacity
+          style={styles.mapLocateBtn}
+          onPress={() => void centerOnUserOrFallback()}
+        >
+          <TargetPositionIcon color={colors.gray700} />
+        </TouchableOpacity>
+
+        {/* Report button */}
+        <TouchableOpacity
+          style={styles.reportBtn}
+          onPress={() => navigation.navigate('AddReport')}
+        >
+          <Text style={styles.reportBtnText}>+ Report</Text>
+        </TouchableOpacity>
+
+        {/* Attribution */}
+        <View style={styles.attribution}>
+          <Text style={styles.attributionText}>© OpenStreetMap • © CARTO</Text>
+        </View>
+
+        {/* Dev debug badge */}
+        {__DEV__ ? (
+          <View style={styles.debugBadge}>
+            <Text style={styles.debugText}>API: {authApi.baseURL}</Text>
+            <Text style={styles.debugText}>Places: {places.length}</Text>
+            <Text style={styles.debugText} numberOfLines={2}>
+              {errorText ? `Err: ${lastErrorDetail ?? errorText}` : 'OK'}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* ── BOTTOM SHEET ── */}
+      <View style={styles.sheet}>
+        {/* Drag handle */}
+        <View style={styles.handleWrap}>
+          <View style={styles.handle} />
+        </View>
+
+        {/* Search row */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <SearchIcon color={colors.gray500}  />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search"
+              placeholderTextColor="#CAC9C9"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            <MicrophoneIcon color={colors.gray500} style={styles.micIcon} />
+          </View>
+          <TouchableOpacity style={styles.filterBtn}>
+            <FilterIcon color={colors.white} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Category chips */}
+        <ScrollView
+          horizontal
+          style={styles.chipsScroll}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+        >
+          {FILTER_CHIPS.map((chip) => {
+            const isActive = activeFilter === chip;
+            return (
+              <TouchableOpacity
+                key={chip}
+                style={[styles.chip, isActive && styles.chipActive]}
+                onPress={() => setActiveFilter(chip)}
+              >
+                {chip === 'All' && (
+                  <ChipsIcon
+                    color={isActive ? colors.white : colors.gray900}
+                    style={styles.chipIcon}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.chipText,
+                    isActive && styles.chipTextActive,
+                  ]}
+                >
+                  {chip}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Scrollable content */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollContent}
+          contentContainerStyle={styles.scrollContentInner}
+        >
+          {/* ── Nearby Accessible Places ── */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Nearby Accessible Places</Text>
+            <TouchableOpacity>
+              <Text style={styles.seeAll}>See all</Text>
+            </TouchableOpacity>
+          </View>
+
+          {isLoading ? (
+            <View style={styles.stateBlock}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : errorText ? (
+            <View style={styles.stateBlock}>
+              <Text style={styles.errorMsg}>{errorText}</Text>
+              <TouchableOpacity
+                style={[styles.retryBtn, { marginTop: 10 }]}
+                onPress={() => {
+                  const category = CHIP_TO_CATEGORY[activeFilter];
+                  void fetchPlaces(mapRegion, category);
+                }}
+              >
+                <Text style={styles.retryBtnText}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : filteredPlaces.length === 0 ? (
+            <View style={styles.stateBlock}>
+              <Text style={styles.stateText}>No places found in this area.</Text>
+            </View>
+          ) : (
+            filteredPlaces.map((place) => (
+              <TouchableOpacity
+                key={place.sourceId}
+                style={styles.placeCard}
+                onPress={() =>
+                  navigation.navigate('PlaceDetails', {
+                    place: {
+                      id: place.sourceId,
+                      name: place.name || 'Unnamed place',
+                      distance: formatDistance(place.distanceMeters),
+                    },
+                  })
+                }
+              >
+                <View style={styles.placeThumb} />
+                <View style={styles.placeInfo}>
+                  <Text style={styles.placeName} numberOfLines={1}>
+                    {place.name || 'Unnamed place'}
+                  </Text>
+                  <View style={styles.placeMetaRow}>
+                    {!!formatDistance(place.distanceMeters) && (
+                      <Text style={styles.placeMeta}>
+                        {formatDistance(place.distanceMeters)}
+                      </Text>
+                    )}
+                    {place.category ? (
+                      <Text style={styles.placeCat}>
+                        {place.category}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+                <TouchableOpacity style={styles.heartBtn}>
+                  <Text style={styles.heartIcon}>♡</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))
+          )}
+
+          {/* ── Reports Nearby ── */}
+          <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+            <Text style={styles.sectionTitle}>Reports Nearby</Text>
+            <TouchableOpacity>
+              <Text style={styles.seeAll}>See all</Text>
+            </TouchableOpacity>
+          </View>
+
+          {reports.length === 0 ? (
+            <View style={styles.stateBlock}>
+              <Text style={styles.stateText}>No reports in this area yet.</Text>
+            </View>
+          ) : (
+            reports.map((report) => {
+              const badge = BADGE_STYLES[report.status];
+              return (
+                <TouchableOpacity
+                  key={report.id}
+                  style={styles.reportCard}
+                  onPress={() =>
+                    navigation.navigate('ReportDetails', { report: undefined })
+                  }
+                >
+                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                    <Text style={[styles.badgeText, { color: badge.text }]}>
+                      {badge.label}
+                    </Text>
+                  </View>
+                  <Text style={styles.reportName}>{report.name}</Text>
+                  <View style={styles.reportMeta}>
+                    <Text style={styles.reportMetaText}>{report.submittedAgo}</Text>
+                    <View style={styles.metaDot} />
+                    <Text style={styles.reportMetaText}>{report.distance}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+
+        </ScrollView>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.white,
-    },
-    // ─── Map ───
-    mapContainer: {
-        height: '42%',
-        position: 'relative' as const,
-    },
-    map: {
-        width: '100%',
-        height: '100%',
-    },
-     floatingButton: {
-  backgroundColor: '#fff',       // make sure button has background
-  padding: 10,
-  borderRadius: 25,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 3,
-  elevation: 5,                  // for Android
-},
-    mapBackBtn: {
-        position: 'absolute',
-        top: 50,
-        left: 16,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: colors.white,
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    mapBookmarkBtn: {
-        position: 'absolute',
-        top: 50,
-        right: 16,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: colors.white,
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    navIcon: { fontSize: 18 },
-    bookmarkIcon: { fontSize: 16 },
-    locateIcon: { fontSize: 16 },
-    locateBtn: {
-        position: 'absolute',
-        right: 16,
-        bottom: 50,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: colors.white,
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    reportBtn: {
-        position: 'absolute',
-        right: 16,
-        bottom: 10,
-        backgroundColor: colors.primary,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 8,
-    },
-    reportBtnText: {
-        color: colors.white,
-        fontWeight: '600',
-        fontSize: 13,
-    },
-    attributionWrap: {
-        position: 'absolute',
-        left: 12,
-        bottom: 10,
-        backgroundColor: 'rgba(255,255,255,0.92)',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    attributionText: {
-        color: colors.gray700,
-        fontSize: 10,
-        fontWeight: '500',
-    },
-    // Handle
-    handleRow: {
-        alignItems: 'center',
-        paddingVertical: 10,
-    },
-    handle: {
-        width: 40,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: colors.gray300,
-    },
-    // Bottom panel
-    bottomPanel: {
-        flex: 1,
-    },
-    // Search
-    searchRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        marginBottom: 12,
-    },
-    searchBar: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.gray100,
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        height: 44,
-        marginRight: 10,
-    },
-    searchIcon: {
-        fontSize: 16,
-        marginRight: 8,
-        color: colors.gray400,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: 15,
-        color: colors.gray800,
-    },
-    filterButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        backgroundColor: '#1B3A4B',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    // Chips
-    chip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: colors.white,
-        borderWidth: 1,
-        borderColor: colors.gray200,
-        marginRight: 8,
-    },
-    chipActive: {
-        backgroundColor: '#1B3A4B',
-        borderColor: '#1B3A4B',
-    },
-    chipText: {
-        fontSize: 13,
-        color: colors.gray600,
-        fontWeight: '500',
-    },
-    chipTextActive: {
-        color: colors.white,
-    },
-    // Section
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        marginBottom: 10,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: colors.gray900,
-    },
-    seeAll: {
-        fontSize: 14,
-        color: colors.primary,
-        fontWeight: '500',
-    },
-    // Place Row
-    placeRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.gray100,
-    },
-    placeThumb: {
-        width: 50,
-        height: 50,
-        borderRadius: 10,
-        marginRight: 12,
-    },
-    placeRowInfo: {
-        flex: 1,
-    },
-    placeRowName: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: colors.gray900,
-    },
-    placeRowMeta: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 2,
-        gap: 4,
-    },
-    placeRowDistance: {
-        fontSize: 12,
-        color: colors.gray500,
-    },
-    placeRowRating: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: colors.gray800,
-    },
-    placeRowReviews: {
-        fontSize: 12,
-        color: colors.gray400,
-    },
-    // Report
-    reportCard: {
-        marginHorizontal: 16,
-        marginBottom: 12,
-        padding: 14,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: colors.gray100,
-        backgroundColor: colors.white,
-    },
-    statusBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        marginBottom: 8,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    reportName: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: colors.gray900,
-        marginBottom: 4,
-    },
-    reportMeta: {
-        fontSize: 12,
-        color: colors.gray500,
-    },
+  container: {
+    flex: 1,
+    backgroundColor: '#FDFDFD',
+  },
+
+  // ── Map ──
+  mapContainer: {
+    height: '52%',
+    position: 'relative',
+  },
+  map: {
+    width: '100%',
+    height: '100%',
+  },
+  floatingBtn: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FDFDFD',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#292526',
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  floatingBtnIcon: {
+    fontSize: 16,
+  },
+  // +/- zoom box (right side, vertically centred in map)
+  mapZoomBox: {
+    position: 'absolute',
+    right: 14,
+    top: '35%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  // Locate button (right side, just below zoom box)
+  mapLocateBtn: {
+    position: 'absolute',
+    right: 14,
+    top: '58%',
+    width: 36,
+    height: 36,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  mapCtrlBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapCtrlText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.gray700,
+  },
+  mapCtrlDivider: {
+    width: 22,
+    height: 1,
+    backgroundColor: colors.gray200,
+  },
+  reportBtn: {
+    position: 'absolute',
+    right: 14,
+    bottom: 30,
+    backgroundColor: '#4AAFD9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  reportBtnText: {
+    color: '#F4F3F5',
+    fontWeight: '500',
+    fontSize: 12,
+  },
+  attribution: {
+    position: 'absolute',
+    left: 10,
+    bottom: 30,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  attributionText: {
+    color: colors.gray600,
+    fontSize: 10,
+  },
+  debugBadge: {
+    position: 'absolute',
+    right: 10,
+    top: 100,
+    maxWidth: '72%',
+    backgroundColor: 'rgba(17,24,39,0.85)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  debugText: {
+    color: '#F9FAFB',
+    fontSize: 10,
+  },
+
+  // ── Bottom sheet ──
+  sheet: {
+    flex: 1,
+    backgroundColor: '#FDFDFD',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowRadius: 16,
+    shadowOpacity: 0.1,
+    elevation: 8,
+  },
+  handleWrap: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  handle: {
+    width: 70,
+    height: 5,
+    borderRadius: 10,
+    backgroundColor: '#D1D5DB',
+  },
+
+  // Search row
+  searchRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 4,
+    alignItems: 'center',
+  },
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: '#DFDEDE',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginRight: 10,
+    backgroundColor: '#FDFDFD',
+  },
+  searchIcon: {
+    fontSize: 16,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#292526',
+    padding: 0,
+  },
+  micIcon: {
+    marginLeft: 5,
+  },
+  filterBtn: {
+    backgroundColor: '#0F172A',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBtnIcon: {
+    color: '#FDFDFD',
+    fontSize: 18,
+  },
+
+  // Chips
+  chipsScroll: {
+    flexGrow: 0,
+    marginBottom: 0,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+    paddingTop: 5,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#DFDEDE',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FDFDFD',
+    marginRight: 8,
+  },
+  chipIcon: {
+    marginRight: 4,
+  },
+  chipActive: {
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+  },
+  chipText: {
+    color: '#292526',
+    fontSize: 14,
+  },
+  chipTextActive: {
+    color: '#FDFDFD',
+  },
+
+  // Scroll area
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentInner: {
+    paddingTop: 0,
+    paddingBottom: 32,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    paddingTop: 5,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#000000',
+  },
+  seeAll: {
+    fontSize: 14,
+    color: '#25A8DF',
+    textDecorationLine: 'underline',
+  },
+  stateBlock: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+  },
+  stateText: {
+    color: colors.gray500,
+    fontSize: 13,
+  },
+  errorMsg: {
+    color: '#B91C1C',
+    fontSize: 13,
+  },
+  retryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  retryBtnText: {
+    color: colors.white,
+    fontWeight: '600',
+    fontSize: 12,
+  },
+
+  // Place cards
+  placeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DFDEDE',
+    borderRadius: 10,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 2,
+  },
+  placeThumb: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    backgroundColor: '#CAC9C9',
+    marginRight: 12,
+  },
+  placeInfo: {
+    flex: 1,
+  },
+  placeName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#000000',
+    marginBottom: 3,
+  },
+  placeMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+  },
+  placeMeta: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333333',
+  },
+  placeCat: {
+    fontSize: 12,
+    color: colors.gray500,
+    marginLeft: 6,
+  },
+  heartBtn: {
+    width: 25,
+    height: 25,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heartIcon: {
+    fontSize: 13,
+    color: colors.gray500,
+  },
+
+  // Report cards
+  reportCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DFDEDE',
+    borderRadius: 10,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 2,
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  badgeText: {
+    fontSize: 14,
+    fontWeight: '400',
+  },
+  reportName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#000000',
+    marginBottom: 4,
+  },
+  reportMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  reportMetaText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  metaDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#6B7280',
+  },
 });

@@ -13,11 +13,43 @@ import {
 import { colors } from '../../constants/colors';
 import { HomeScreenProps } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
+import * as Location from 'expo-location';
+import { placesApi } from '../../services/api';
+import { ActivityIndicator } from 'react-native';
+import { SearchIcon } from '../../components/icons/searchIcon';
+import { FilterIcon } from '../../components/icons/FilterIcon';
+import { ChipsIcon } from '../../components/icons/ChipsIcon';
+import { MicrophoneIcon } from '../../components/icons/MicrophoneIcon';
+import { PlacesIcon } from '../../components/icons/PlacesIcon';
+import { BloggingIcon } from '../../components/icons/BloggingIcon';
+import { UserIcon } from '../../components/icons/UserIcon';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.7;
 
 const FILTER_CHIPS = ['All', 'Entrance', 'Toilet', 'Elevator', 'Parking'];
+
+const CHIP_TO_CATEGORY: Record<string, string | undefined> = {
+    All: undefined,
+    Entrance: 'entrance',
+    Toilet: 'toilet',
+    Elevator: 'elevator',
+    Parking: 'parking',
+};
+
+type NearbyPlace = {
+    sourceId: string;
+    name?: string;
+    category?: string;
+    location: {
+        type: 'Point';
+        coordinates: [number, number];
+    };
+    distanceMeters?: number;
+    accessibility: {
+        wheelchair: 'yes' | 'no' | 'limited' | 'unknown';
+    };
+};
 
 const MOCK_PLACES = [
     {
@@ -75,6 +107,48 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
     const [activeFilter, setActiveFilter] = useState('All');
     const [activeCategory, setActiveCategory] = useState<'Places' | 'Blogs'>('Places');
 
+    const [places, setPlaces] = useState<NearbyPlace[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const formatDistance = (distanceMeters?: number) => {
+        if (!distanceMeters) return '??';
+        return distanceMeters < 1000
+            ? `${Math.round(distanceMeters)}m`
+            : `${(distanceMeters / 1000).toFixed(1)}km`;
+    };
+
+    const fetchNearby = async () => {
+        setIsLoading(true);
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') return;
+
+            const current = await Location.getCurrentPositionAsync({});
+            const category = activeFilter === 'All' ? undefined : activeFilter;
+
+            const response = await placesApi.findNearby(
+                current.coords.latitude,
+                current.coords.longitude,
+                5000, // 5km radius
+                1,
+                10,
+                category
+            );
+
+            setPlaces(response?.data?.data || []);
+        } catch (error) {
+            console.error('[HomeScreen] Failed to fetch nearby:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    React.useEffect(() => {
+        if (activeCategory === 'Places') {
+            void fetchNearby();
+        }
+    }, [activeFilter, activeCategory]);
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
@@ -85,7 +159,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                         {isAuthenticated ? (
                             <>
                                 <View style={styles.avatar}>
-                                    <Text style={styles.avatarIcon}>👤</Text>
+                                    <UserIcon color={colors.gray400} width={22} height={22} />
                                 </View>
                                 <View>
                                     <Text style={styles.helloText}>Hello</Text>
@@ -95,7 +169,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                         ) : (
                             <>
                                 <View style={styles.avatar}>
-                                    <Text style={styles.avatarIcon}>👤</Text>
+                                    <UserIcon color={colors.gray400} width={22} height={22} />
                                 </View>
                                 <View>
                                     <Text style={styles.helloText}>Welcome</Text>
@@ -114,18 +188,18 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                 {/* Search Bar */}
                 <View style={styles.searchRow}>
                     <View style={styles.searchBar}>
-                        <Text style={styles.searchIcon}>🔍</Text>
+                        <SearchIcon color={colors.gray500}  />
                         <TextInput
                             style={styles.searchInput}
                             placeholder="Search"
                             placeholderTextColor={colors.gray400}
                         />
                         <TouchableOpacity>
-                            <Text style={{ fontSize: 18, color: colors.gray400 }}>🎤</Text>
+                            <MicrophoneIcon color={colors.gray500} />
                         </TouchableOpacity>
                     </View>
                     <TouchableOpacity style={styles.filterButton}>
-                        <Text style={{ color: colors.white, fontSize: 16 }}>☰</Text>
+                        <FilterIcon color={colors.white} />
                     </TouchableOpacity>
                 </View>
 
@@ -136,28 +210,35 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                     style={styles.chipsRow}
                     contentContainerStyle={{ paddingHorizontal: 16 }}
                 >
-                    {FILTER_CHIPS.map((chip) => (
-                        <TouchableOpacity
-                            key={chip}
-                            style={[
-                                styles.chip,
-                                activeFilter === chip && styles.chipActive,
-                            ]}
-                            onPress={() => setActiveFilter(chip)}
-                        >
-                            {chip === 'All' && (
-                                <Text style={{ fontSize: 10, marginRight: 4 }}>⊞</Text>
-                            )}
-                            <Text
+                    {FILTER_CHIPS.map((chip) => {
+                        const isActive = activeFilter === chip;
+                        return (
+                            <TouchableOpacity
+                                key={chip}
                                 style={[
-                                    styles.chipText,
-                                    activeFilter === chip && styles.chipTextActive,
+                                    styles.chip,
+                                    isActive && styles.chipActive,
                                 ]}
+                                onPress={() => setActiveFilter(chip)}
                             >
-                                {chip}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                                {chip === 'All' && (
+                                    <ChipsIcon
+                                        color={isActive ? colors.white : colors.gray900}
+                                        width={16}
+                                        height={16}
+                                    />
+                                )}
+                                <Text
+                                    style={[
+                                        styles.chipText,
+                                        isActive && styles.chipTextActive,
+                                    ]}
+                                >
+                                    {chip}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
                 </ScrollView>
 
                 {/* Category Tabs: Places / Blogs */}
@@ -169,7 +250,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                         ]}
                         onPress={() => setActiveCategory('Places')}
                     >
-                        <Text style={{ fontSize: 28 }}>📍</Text>
+                        <PlacesIcon color={activeCategory === 'Places' ? colors.primary : colors.gray900} width={28} height={28} />
                         <Text style={styles.categoryLabel}>Places</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -179,7 +260,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                         ]}
                         onPress={() => setActiveCategory('Blogs')}
                     >
-                        <Text style={{ fontSize: 28 }}>📝</Text>
+                        <BloggingIcon color={activeCategory === 'Blogs' ? colors.primary : colors.gray900} width={28} height={28} />
                         <Text style={styles.categoryLabel}>Blogs</Text>
                     </TouchableOpacity>
                 </View>
@@ -189,103 +270,129 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                         {/* Nearby Accessible Places */}
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionTitle}>Nearby Accessible Places</Text>
-                            <TouchableOpacity>
-                                <Text style={styles.seeAll}>See all</Text>
+                            <TouchableOpacity onPress={() => navigation.navigate('Map' as any)}>
+                                <Text style={styles.seeAll}>See map</Text>
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
-                        >
-                            {MOCK_PLACES.map((place) => (
-                                <TouchableOpacity
-                                    key={place.id}
-                                    style={styles.placeCard}
-                                    onPress={() => navigation.navigate('PlaceDetails', { place })}
-                                >
-                                    <View style={styles.placeImageWrapper}>
-                                        <Image
-                                            source={{ uri: place.image }}
-                                            style={styles.placeImage}
-                                        />
-                                        <TouchableOpacity style={styles.heartBadge}>
-                                            <Text style={{ color: colors.primary, fontSize: 14 }}>♡</Text>
-                                        </TouchableOpacity>
+                        {isLoading ? (
+                            <View style={{ height: 200, justifyContent: 'center' }}>
+                                <ActivityIndicator color={colors.primary} />
+                            </View>
+                        ) : (
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
+                            >
+                                {places.length === 0 ? (
+                                    <View style={[styles.placeCard, { height: 160, justifyContent: 'center', alignItems: 'center' }]}>
+                                        <Text style={styles.placeReviews}>No places found nearby</Text>
                                     </View>
-                                    <Text style={styles.placeName}>{place.name}</Text>
-                                    <View style={styles.placeInfoRow}>
-                                        <Text style={styles.placeDistance}>{place.distance}</Text>
-                                        <Text style={styles.placeRating}>{place.rating}</Text>
-                                        <Text style={{ color: '#F59E0B', fontSize: 12 }}>★</Text>
-                                        <Text style={styles.placeReviews}>({place.reviews})</Text>
-                                    </View>
-                                    <View style={styles.tagsRow}>
-                                        {place.tags.map((tag) => (
-                                            <View key={tag} style={styles.tag}>
-                                                <Text style={styles.tagText}>{tag}</Text>
+                                ) : (
+                                    places.map((place) => (
+                                        <TouchableOpacity
+                                            key={place.sourceId}
+                                            style={styles.placeCard}
+                                            onPress={() => navigation.navigate('PlaceDetails', {
+                                                place: {
+                                                    id: place.sourceId,
+                                                    name: place.name || 'Unnamed',
+                                                    distance: formatDistance(place.distanceMeters)
+                                                }
+                                            })}
+                                        >
+                                            <View style={styles.placeImageWrapper}>
+                                                <Image
+                                                    source={{ uri: `https://images.unsplash.com/photo-1540555700478-4be289fbec6d?w=400&h=300&fit=crop` }}
+                                                    style={styles.placeImage}
+                                                />
                                             </View>
-                                        ))}
-                                    </View>
-                                    <TouchableOpacity
-                                        style={styles.directionsBtn}
-                                        onPress={() => navigation.navigate('PlaceDetails', { place })}
-                                    >
-                                        <Text style={styles.directionsBtnText}>Directions  ›</Text>
-                                    </TouchableOpacity>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                                            <Text style={styles.placeName} numberOfLines={1}>{place.name || 'Unnamed place'}</Text>
+                                            <View style={styles.placeInfoRow}>
+                                                <Text style={styles.placeDistance}>{formatDistance(place.distanceMeters)}</Text>
+                                                <Text style={styles.placeRating}>4.5</Text>
+                                                <Text style={{ color: '#F59E0B', fontSize: 12 }}>★</Text>
+                                            </View>
+                                            <View style={styles.tagsRow}>
+                                                <View style={[styles.tag, { backgroundColor: place.accessibility.wheelchair === 'yes' ? '#DEF7EC' : '#FBD5D5' }]}>
+                                                    <Text style={[styles.tagText, { color: place.accessibility.wheelchair === 'yes' ? '#03543F' : '#9B1C1C' }]}>
+                                                        Wheelchair: {place.accessibility.wheelchair}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={styles.directionsBtn}
+                                                onPress={() => navigation.navigate('PlaceDetails', {
+                                                    place: {
+                                                        id: place.sourceId,
+                                                        name: place.name || 'Unnamed',
+                                                        distance: formatDistance(place.distanceMeters)
+                                                    }
+                                                })}
+                                            >
+                                                <Text style={styles.directionsBtnText}>View Details  ›</Text>
+                                            </TouchableOpacity>
+                                        </TouchableOpacity>
+                                    ))
+                                )}
+                            </ScrollView>
+                        )}
 
                         {/* Most Accessible Places */}
                         <View style={[styles.sectionHeader, { marginTop: 24 }]}>
                             <Text style={styles.sectionTitle}>Most Accessible Places</Text>
-                            <TouchableOpacity>
-                                <Text style={styles.seeAll}>See all</Text>
-                            </TouchableOpacity>
                         </View>
 
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
-                        >
-                            {MOCK_PLACES.map((place) => (
-                                <TouchableOpacity
-                                    key={`most-${place.id}`}
-                                    style={styles.placeCard}
-                                    onPress={() => navigation.navigate('PlaceDetails', { place })}
-                                >
-                                    <View style={styles.placeImageWrapper}>
-                                        <Image
-                                            source={{ uri: place.image }}
-                                            style={styles.placeImage}
-                                        />
-                                        <TouchableOpacity style={styles.heartBadge}>
-                                            <Text style={{ color: colors.primary, fontSize: 14 }}>♡</Text>
-                                        </TouchableOpacity>
+                        {isLoading ? (
+                            <View style={{ height: 200, justifyContent: 'center' }}>
+                                <ActivityIndicator color={colors.primary} />
+                            </View>
+                        ) : (
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
+                            >
+                                {places.length === 0 ? (
+                                    <View style={[styles.placeCard, { height: 160, justifyContent: 'center', alignItems: 'center' }]}>
+                                        <Text style={styles.placeReviews}>No data available</Text>
                                     </View>
-                                    <Text style={styles.placeName}>{place.name}</Text>
-                                    <View style={styles.placeInfoRow}>
-                                        <Text style={styles.placeDistance}>{place.distance}</Text>
-                                        <Text style={styles.placeRating}>{place.rating}</Text>
-                                        <Text style={{ color: '#F59E0B', fontSize: 12 }}>★</Text>
-                                        <Text style={styles.placeReviews}>({place.reviews})</Text>
-                                    </View>
-                                    <View style={styles.tagsRow}>
-                                        {place.tags.map((tag) => (
-                                            <View key={tag} style={styles.tag}>
-                                                <Text style={styles.tagText}>{tag}</Text>
+                                ) : (
+                                    [...places].reverse().map((place) => (
+                                        <TouchableOpacity
+                                            key={`most-${place.sourceId}`}
+                                            style={styles.placeCard}
+                                            onPress={() => navigation.navigate('PlaceDetails', {
+                                                place: {
+                                                    id: place.sourceId,
+                                                    name: place.name || 'Unnamed',
+                                                    distance: formatDistance(place.distanceMeters)
+                                                }
+                                            })}
+                                        >
+                                            <View style={styles.placeImageWrapper}>
+                                                <Image
+                                                    source={{ uri: `https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=300&fit=crop` }}
+                                                    style={styles.placeImage}
+                                                />
                                             </View>
-                                        ))}
-                                    </View>
-                                    <TouchableOpacity style={styles.directionsBtn}>
-                                        <Text style={styles.directionsBtnText}>Directions  ›</Text>
-                                    </TouchableOpacity>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                                            <Text style={styles.placeName} numberOfLines={1}>{place.name || 'Unnamed place'}</Text>
+                                            <View style={styles.placeInfoRow}>
+                                                <Text style={styles.placeDistance}>{formatDistance(place.distanceMeters)}</Text>
+                                                <Text style={styles.placeRating}>4.9</Text>
+                                                <Text style={{ color: '#F59E0B', fontSize: 12 }}>★</Text>
+                                            </View>
+                                            <View style={styles.tagsRow}>
+                                                <View style={[styles.tag, { backgroundColor: '#E0F2FE' }]}>
+                                                    <Text style={[styles.tagText, { color: '#0369A1' }]}>Top Rated Accessibility</Text>
+                                                </View>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))
+                                )}
+                            </ScrollView>
+                        )}
                     </>
                 ) : (
                     <>

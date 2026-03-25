@@ -1,4 +1,40 @@
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
+
+function uniqueUrls(urls: string[]) {
+  return [...new Set(urls.filter((url) => url.length > 0))];
+}
+
+function resolveMetroHostUrl() {
+  const scriptURL: string | undefined = NativeModules.SourceCode?.scriptURL;
+  const hostMatch = scriptURL?.match(
+    /^(?:[a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/:]+)(?::\d+)?\//,
+  );
+  const metroHost = hostMatch?.[1];
+
+  if (
+    metroHost &&
+    metroHost !== 'localhost' &&
+    metroHost !== '127.0.0.1' &&
+    metroHost !== '10.0.2.2'
+  ) {
+    return `http://${metroHost}:3000`;
+  }
+
+  return null;
+}
+
+export function getApiBaseUrlCandidates() {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const metroUrl = resolveMetroHostUrl() ?? '';
+  const androidEmulatorUrl = 'http://10.0.2.2:3000';
+  const localhostUrl = 'http://localhost:3000';
+
+  if (Platform.OS === 'android') {
+    return uniqueUrls([envUrl, metroUrl, androidEmulatorUrl, localhostUrl]);
+  }
+
+  return uniqueUrls([envUrl, metroUrl, localhostUrl, androidEmulatorUrl]);
+}
 
 /**
  * Resolve API base URL for different environments.
@@ -8,27 +44,11 @@ import { Platform } from 'react-native';
  * For iOS Simulator, use localhost
  */
 export function getApiBaseUrl() {
-  // Check environment variable first
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  
-  if (envUrl && envUrl.length > 0) {
-    console.log('[getApiBaseUrl] Using EXPO_PUBLIC_API_URL:', envUrl);
-    return envUrl;
-  }
-
-  // For Android, default to emulator alias
-  // NOTE: If you're using Expo Go or a physical device, set EXPO_PUBLIC_API_URL
-  // to your LAN IP (e.g., http://192.168.1.218:3000)
-  if (Platform.OS === 'android') {
-    const url = 'http://10.0.2.2:3000';
-    console.log('[getApiBaseUrl] Android - using:', url);
-    return url;
-  }
-
-  // iOS Simulator and web use localhost
-  const url = 'http://localhost:3000';
-  console.log('[getApiBaseUrl] iOS/Web - using:', url);
-  return url;
+  const candidates = getApiBaseUrlCandidates();
+  const selectedUrl = candidates[0] ?? 'http://localhost:3000';
+  console.log('[getApiBaseUrl] Candidates:', candidates);
+  console.log('[getApiBaseUrl] Selected:', selectedUrl);
+  return selectedUrl;
 }
 
 

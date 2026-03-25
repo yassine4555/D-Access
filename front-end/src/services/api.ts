@@ -1,10 +1,12 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { getApiBaseUrl } from '../config/api';
+import { getApiBaseUrl, getApiBaseUrlCandidates } from '../config/api';
 
 const BASE_URL = getApiBaseUrl();
+const BASE_URL_CANDIDATES = getApiBaseUrlCandidates();
 
 console.log('[API] Base URL configured as:', BASE_URL);
+console.log('[API] Base URL candidates:', BASE_URL_CANDIDATES);
 
 const api = axios.create({
     baseURL: BASE_URL,
@@ -46,8 +48,45 @@ export const authApi = {
 
 export const placesApi = {
     getAll: () => api.get('/places'),
-    findNearby: (lat: number, lon: number, radius: number = 5000, page: number = 1, limit: number = 20) =>
-        api.get(`/places/nearby?lat=${lat}&lon=${lon}&radius=${radius}&page=${page}&limit=${limit}`),
+    findNearby: async (
+        lat: number,
+        lon: number,
+        radius: number = 5000,
+        page: number = 1,
+        limit: number = 20,
+        category?: string,
+    ) => {
+        const params = new URLSearchParams({
+            lat: String(lat),
+            lon: String(lon),
+            radius: String(radius),
+            page: String(page),
+            limit: String(limit),
+        });
+
+        if (category) {
+            params.append('category', category);
+        }
+
+        const path = `/places/nearby?${params.toString()}`;
+        let lastError: unknown;
+
+        for (const baseURL of BASE_URL_CANDIDATES) {
+            try {
+                return await api.get(path, { baseURL });
+            } catch (error) {
+                lastError = error;
+
+                if (axios.isAxiosError(error) && error.response) {
+                    throw error;
+                }
+
+                console.warn('[placesApi.findNearby] Network error, retrying with next base URL:', baseURL);
+            }
+        }
+
+        throw lastError;
+    },
 };
 
 export const productsApi = {
