@@ -17,4 +17,8 @@ export const colors = {
     blue500: '#3B82F6',
     cyan200: '#A5F3FC',
     sky700: '#0369A1',
+    accessibilityYes: '#16A34A',
+    accessibilityNo: '#DC2626',
+    accessibilityLimited: '#D97706',
+    accessibilityUnknown: '#6B7280',
 };

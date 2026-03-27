@@ -62,6 +62,29 @@ async function clearToken() {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
 }
 
+function extractTokenFromDeepLink(url: string): string | null {
+    try {
+        const parsedUrl = new URL(url);
+        const queryToken = parsedUrl.searchParams.get('token');
+        if (queryToken) {
+            return queryToken;
+        }
+
+        if (parsedUrl.hash) {
+            const hashParams = new URLSearchParams(parsedUrl.hash.replace(/^#/, ''));
+            const hashToken = hashParams.get('token');
+            if (hashToken) {
+                return hashToken;
+            }
+        }
+    } catch {
+        // Fallback to regex parsing for malformed deep links.
+    }
+
+    const match = url.match(/[?&#]token=([^&#]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user,  setUser]  = useState<AuthUser | null>(null);
@@ -93,14 +116,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // ── Handle deep-link callback (social OAuth) ─────────────────────────────
     const handleDeepLink = useCallback(async (url: string): Promise<boolean> => {
         console.log('[AuthContext] handleDeepLink() - Received URL:', url);
-        
-        const match = url.match(/[?&]token=([^&]+)/);
-        if (!match) {
+
+        const jwt = extractTokenFromDeepLink(url);
+        if (!jwt) {
             console.log('[AuthContext] handleDeepLink() - No token found in URL');
             return false;
         }
-        
-        const jwt = decodeURIComponent(match[1]);
+
         console.log('[AuthContext] handleDeepLink() - Token extracted (length):', jwt.length);
 
         if (isHandlingDeepLinkRef.current) {

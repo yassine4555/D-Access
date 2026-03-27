@@ -5,6 +5,11 @@ on:
   push:
     branches: [main, master, develop]
 
+env:
+  # Opt in early to the GitHub Actions Node 24 runtime for JS actions
+  # to avoid Node 20 deprecation-related surprises.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -13,10 +18,10 @@ jobs:
         working-directory: back-end
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -41,10 +46,10 @@ jobs:
         working-directory: front-end
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm

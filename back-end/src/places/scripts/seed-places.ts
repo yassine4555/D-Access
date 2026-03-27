@@ -35,7 +35,8 @@ async function run() {
   }
 }
 
-run().catch((error) => {
-  console.error('Seed failed:', error?.message ?? error);
+run().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('Seed failed:', message);
   process.exit(1);
 });

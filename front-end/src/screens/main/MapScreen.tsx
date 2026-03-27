@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -20,18 +20,14 @@ import { FilterIcon } from '../../components/icons/FilterIcon';
 import { MicrophoneIcon } from '../../components/icons/MicrophoneIcon';
 import { TargetPositionIcon } from '../../components/icons/TargetPositionIcon';
 import { MapScreenProps } from '../../types/navigation';
+import { NearbyPlace, WheelchairAccessibility } from '../../types/place';
 import { SearchIcon } from '../../components/icons/searchIcon';
-
-type NearbyPlace = {
-  sourceId: string;
-  name?: string;
-  category?: string;
-  location: {
-    type: 'Point';
-    coordinates: [number, number];
-  };
-  distanceMeters?: number;
-};
+import { MapPlacePin } from '../../components/common/MapPlacePin';
+import {
+  createNearbyPlacesCacheKey,
+  getCachedNearbyPlaces,
+  setCachedNearbyPlaces,
+} from '../../services/placesCacheService';
 
 type ReportItem = {
   id: string;
@@ -62,7 +58,15 @@ const DEFAULT_RADIUS_METERS = 5000;
 const DEFAULT_LIMIT = 30;
 const TILE_URL_TEMPLATE =
   process.env.EXPO_PUBLIC_TILE_URL ||
-  'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+  'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'; //https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png
+
+function sortPlacesByDistance(places: NearbyPlace[]): NearbyPlace[] {
+  return [...places].sort(
+    (a, b) =>
+      (a.distanceMeters ?? Number.MAX_SAFE_INTEGER) -
+      (b.distanceMeters ?? Number.MAX_SAFE_INTEGER),
+  );
+}
 
 function formatDistance(distanceMeters?: number): string {
   if (typeof distanceMeters !== 'number') return '';
@@ -79,10 +83,75 @@ const BADGE_STYLES: Record<
   inaccessible: { bg: '#FEE2E2', text: '#DC2626', label: 'Not Accessible' },
 };
 
+type FetchPlacesOptions = {
+  showLoader?: boolean;
+};
+
+type PlaceMarkerProps = {
+  place: NearbyPlace;
+  wheelchair: WheelchairAccessibility;
+  isSelected: boolean;
+  onMarkerPress: (place: NearbyPlace) => void;
+};
+
+const PlaceMarker = React.memo(
+  function PlaceMarker({
+    place,
+    wheelchair,
+    isSelected,
+    onMarkerPress,
+  }: PlaceMarkerProps) {
+    const [lng, lat] = place.location.coordinates;
+    const [trackViewChanges, setTrackViewChanges] = useState(true);
+
+    useEffect(() => {
+      const initialTimer = setTimeout(() => {
+        setTrackViewChanges(false);
+      }, 160);
+
+      return () => {
+        clearTimeout(initialTimer);
+      };
+    }, []);
+
+    useEffect(() => {
+      setTrackViewChanges(true);
+      const timer = setTimeout(() => {
+        setTrackViewChanges(false);
+      }, 120);
+
+      return () => {
+        clearTimeout(timer);
+      };
+    }, [isSelected, place.category, wheelchair]);
+
+    return (
+      <Marker
+        coordinate={{ latitude: lat, longitude: lng }}
+        anchor={{ x: 0.5, y: 1 }}
+        tracksViewChanges={trackViewChanges}
+        onPress={() => onMarkerPress(place)}
+      >
+        <MapPlacePin
+          wheelchair={wheelchair}
+          category={place.category}
+          isSelected={isSelected}
+        />
+      </Marker>
+    );
+  },
+  (prev, next) =>
+    prev.place.sourceId === next.place.sourceId &&
+    prev.isSelected === next.isSelected &&
+    prev.wheelchair === next.wheelchair &&
+    prev.place.category === next.place.category &&
+    prev.onMarkerPress === next.onMarkerPress,
+);
+
 export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
-  const [mapRegion, setMapRegion] = useState<Region>(FALLBACK_REGION);
   const [activeFilter, setActiveFilter] = useState('All');
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [lastErrorDetail, setLastErrorDetail] = useState<string | null>(null);
@@ -93,6 +162,8 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
   const mapRef = useRef<MapView | null>(null);
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRegionRef = useRef<Region>(FALLBACK_REGION);
+  const currentRegionRef = useRef<Region>(FALLBACK_REGION);
+  const fetchSequenceRef = useRef(0);
 
   const hasMeaningfulRegionChange = (nextRegion: Region) => {
     const previous = lastRegionRef.current;
@@ -102,47 +173,80 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
     return latDelta > 0.0005 || lonDelta > 0.0005;
   };
 
-  const fetchPlaces = async (region: Region, category?: string) => {
-    setIsLoading(true);
-    setErrorText(null);
-    setLastErrorDetail(null);
-
-    try {
-      const response = await placesApi.findNearby(
-        region.latitude,
-        region.longitude,
-        DEFAULT_RADIUS_METERS,
-        1,
-        DEFAULT_LIMIT,
+  const fetchPlaces = useCallback(
+    async (
+      region: Region,
+      category?: string,
+      options: FetchPlacesOptions = { showLoader: true },
+    ) => {
+      const showLoader = options.showLoader ?? true;
+      const requestSequence = ++fetchSequenceRef.current;
+      const cacheKey = createNearbyPlacesCacheKey({
+        region,
+        radiusMeters: DEFAULT_RADIUS_METERS,
+        limit: DEFAULT_LIMIT,
         category,
-      );
+      });
 
-      const data = response?.data?.data;
-      if (Array.isArray(data)) {
-        setPlaces(
-          data.sort(
-            (a: NearbyPlace, b: NearbyPlace) =>
-              (a.distanceMeters ?? Number.MAX_SAFE_INTEGER) -
-              (b.distanceMeters ?? Number.MAX_SAFE_INTEGER),
-          ),
-        );
-      } else {
-        setPlaces([]);
+      const cachedPlaces = getCachedNearbyPlaces<NearbyPlace[]>(cacheKey);
+      if (cachedPlaces) {
+        setPlaces(cachedPlaces);
+        setErrorText(null);
+        setLastErrorDetail(null);
+        if (showLoader) {
+          setIsLoading(false);
+        }
+        return;
       }
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown fetch error';
-      setErrorText('Unable to load nearby places right now.');
-      setLastErrorDetail(errorMessage);
-      setPlaces([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  const debugError = errorText
-    ? `${errorText}${lastErrorDetail ? ` (${lastErrorDetail})` : ''}`
-    : 'none';
+      if (showLoader) {
+        setIsLoading(true);
+      }
+
+      setErrorText(null);
+      setLastErrorDetail(null);
+
+      try {
+        const response = await placesApi.findNearby(
+          region.latitude,
+          region.longitude,
+          DEFAULT_RADIUS_METERS,
+          1,
+          DEFAULT_LIMIT,
+          category,
+        );
+
+        if (requestSequence !== fetchSequenceRef.current) {
+          return;
+        }
+
+        const data = response?.data?.data;
+        if (Array.isArray(data)) {
+          const normalizedPlaces = sortPlacesByDistance(data as NearbyPlace[]);
+          setPlaces(normalizedPlaces);
+          setCachedNearbyPlaces(cacheKey, normalizedPlaces);
+        } else {
+          setPlaces([]);
+          setCachedNearbyPlaces(cacheKey, []);
+        }
+      } catch (error) {
+        if (requestSequence !== fetchSequenceRef.current) {
+          return;
+        }
+
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown fetch error';
+        setErrorText('Unable to load nearby places right now.');
+        setLastErrorDetail(errorMessage);
+        setPlaces([]);
+      } finally {
+        if (showLoader && requestSequence === fetchSequenceRef.current) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -168,11 +272,14 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           longitudeDelta: 0.04,
         };
 
-        setMapRegion(nextRegion);
+        currentRegionRef.current = nextRegion;
+        lastRegionRef.current = nextRegion;
         mapRef.current?.animateToRegion(nextRegion, 500);
-        await fetchPlaces(nextRegion, undefined);
+        await fetchPlaces(nextRegion, undefined, { showLoader: true });
       } catch {
-        await fetchPlaces(FALLBACK_REGION, undefined);
+        currentRegionRef.current = FALLBACK_REGION;
+        lastRegionRef.current = FALLBACK_REGION;
+        await fetchPlaces(FALLBACK_REGION, undefined, { showLoader: true });
       }
     };
 
@@ -184,12 +291,12 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
         clearTimeout(fetchTimerRef.current);
       }
     };
-  }, []);
+  }, [fetchPlaces]);
 
   useEffect(() => {
     const category = CHIP_TO_CATEGORY[activeFilter];
-    void fetchPlaces(mapRegion, category);
-  }, [activeFilter]);
+    void fetchPlaces(currentRegionRef.current, category, { showLoader: true });
+  }, [activeFilter, fetchPlaces]);
 
   const onRegionChangeComplete = (region: Region) => {
     if (!hasMeaningfulRegionChange(region)) {
@@ -197,7 +304,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
     }
 
     lastRegionRef.current = region;
-    setMapRegion(region);
+    currentRegionRef.current = region;
 
     if (fetchTimerRef.current) {
       clearTimeout(fetchTimerRef.current);
@@ -205,7 +312,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
 
     fetchTimerRef.current = setTimeout(() => {
       const category = CHIP_TO_CATEGORY[activeFilter];
-      void fetchPlaces(region, category);
+      void fetchPlaces(region, category, { showLoader: false });
     }, 600);
   };
 
@@ -219,26 +326,31 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
         longitudeDelta: 0.04,
       };
 
-      setMapRegion(nextRegion);
+      currentRegionRef.current = nextRegion;
       lastRegionRef.current = nextRegion;
       mapRef.current?.animateToRegion(nextRegion, 500);
       const category = CHIP_TO_CATEGORY[activeFilter];
-      await fetchPlaces(nextRegion, category);
+      await fetchPlaces(nextRegion, category, { showLoader: false });
     } catch {
-      setMapRegion(FALLBACK_REGION);
+      currentRegionRef.current = FALLBACK_REGION;
       lastRegionRef.current = FALLBACK_REGION;
       mapRef.current?.animateToRegion(FALLBACK_REGION, 500);
       const category = CHIP_TO_CATEGORY[activeFilter];
-      await fetchPlaces(FALLBACK_REGION, category);
+      await fetchPlaces(FALLBACK_REGION, category, { showLoader: false });
     }
   };
 
   // Client-side search filter on top of API results
-  const filteredPlaces = searchQuery.trim()
-    ? places.filter((p) =>
-        (p.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : places;
+  const filteredPlaces = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return places;
+    }
+
+    return places.filter((p) =>
+      (p.name ?? '').toLowerCase().includes(query),
+    );
+  }, [places, searchQuery]);
 
   const zoomIn = () => {
     mapRef.current?.animateToRegion(
@@ -262,6 +374,42 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
     );
   };
 
+  const resolveWheelchair = useCallback(
+    (place: NearbyPlace): WheelchairAccessibility => {
+      const value = place.accessibility?.wheelchair;
+      if (
+        value === 'yes' ||
+        value === 'no' ||
+        value === 'limited' ||
+        value === 'unknown'
+      ) {
+        return value;
+      }
+      return 'unknown';
+    },
+    [],
+  );
+
+  const handleMarkerPress = useCallback(
+    (place: NearbyPlace) => {
+      setSelectedPlaceId((previousSelectedPlaceId) => {
+        if (previousSelectedPlaceId === place.sourceId) {
+          navigation.navigate('PlaceDetails', {
+            place: {
+              id: place.sourceId,
+              name: place.name || 'Unnamed place',
+              distance: formatDistance(place.distanceMeters),
+            },
+          });
+          return previousSelectedPlaceId;
+        }
+
+        return place.sourceId;
+      });
+    },
+    [navigation],
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -273,28 +421,20 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           style={styles.map}
           initialRegion={FALLBACK_REGION}
           onRegionChangeComplete={onRegionChangeComplete}
+          onPress={() => setSelectedPlaceId(null)}
           showsUserLocation
           showsMyLocationButton={false}
           mapType="none"
         >
           <UrlTile urlTemplate={TILE_URL_TEMPLATE} maximumZ={19} flipY={false} />
           {filteredPlaces.map((place) => {
-            const [lng, lat] = place.location.coordinates;
             return (
-              <Marker
+              <PlaceMarker
                 key={place.sourceId}
-                coordinate={{ latitude: lat, longitude: lng }}
-                title={place.name || 'Unnamed place'}
-                description={formatDistance(place.distanceMeters)}
-                onPress={() =>
-                  navigation.navigate('PlaceDetails', {
-                    place: {
-                      id: place.sourceId,
-                      name: place.name || 'Unnamed place',
-                      distance: formatDistance(place.distanceMeters),
-                    },
-                  })
-                }
+                place={place}
+                wheelchair={resolveWheelchair(place)}
+                isSelected={selectedPlaceId === place.sourceId}
+                onMarkerPress={handleMarkerPress}
               />
             );
           })}
@@ -441,7 +581,9 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
                 style={[styles.retryBtn, { marginTop: 10 }]}
                 onPress={() => {
                   const category = CHIP_TO_CATEGORY[activeFilter];
-                  void fetchPlaces(mapRegion, category);
+                  void fetchPlaces(currentRegionRef.current, category, {
+                    showLoader: true,
+                  });
                 }}
               >
                 <Text style={styles.retryBtnText}>Try again</Text>

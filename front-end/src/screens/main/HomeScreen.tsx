@@ -9,13 +9,13 @@ import {
     StyleSheet,
     Dimensions,
     StatusBar,
+    ActivityIndicator,
 } from 'react-native';
 import { colors } from '../../constants/colors';
 import { HomeScreenProps } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
 import * as Location from 'expo-location';
 import { placesApi } from '../../services/api';
-import { ActivityIndicator } from 'react-native';
 import { SearchIcon } from '../../components/icons/searchIcon';
 import { FilterIcon } from '../../components/icons/FilterIcon';
 import { ChipsIcon } from '../../components/icons/ChipsIcon';
@@ -23,63 +23,12 @@ import { MicrophoneIcon } from '../../components/icons/MicrophoneIcon';
 import { PlacesIcon } from '../../components/icons/PlacesIcon';
 import { BloggingIcon } from '../../components/icons/BloggingIcon';
 import { UserIcon } from '../../components/icons/UserIcon';
+import { NearbyPlace } from '../../types/place';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.7;
 
 const FILTER_CHIPS = ['All', 'Entrance', 'Toilet', 'Elevator', 'Parking'];
-
-const CHIP_TO_CATEGORY: Record<string, string | undefined> = {
-    All: undefined,
-    Entrance: 'entrance',
-    Toilet: 'toilet',
-    Elevator: 'elevator',
-    Parking: 'parking',
-};
-
-type NearbyPlace = {
-    sourceId: string;
-    name?: string;
-    category?: string;
-    location: {
-        type: 'Point';
-        coordinates: [number, number];
-    };
-    distanceMeters?: number;
-    accessibility: {
-        wheelchair: 'yes' | 'no' | 'limited' | 'unknown';
-    };
-};
-
-const MOCK_PLACES = [
-    {
-        id: '1',
-        name: 'Gem Luxury Spa',
-        distance: '0.7Km',
-        rating: 4.8,
-        reviews: 74,
-        tags: ['Entrance', 'Toilet', 'Elevator'],
-        image: 'https://images.unsplash.com/photo-1540555700478-4be289fbec6d?w=400&h=300&fit=crop',
-    },
-    {
-        id: '2',
-        name: 'Coffee VI',
-        distance: '1.2Km',
-        rating: 4.5,
-        reviews: 56,
-        tags: ['Entrance', 'Parking'],
-        image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400&h=300&fit=crop',
-    },
-    {
-        id: '3',
-        name: 'Central Park Hotel',
-        distance: '2.1Km',
-        rating: 4.9,
-        reviews: 128,
-        tags: ['Entrance', 'Elevator', 'Parking'],
-        image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=300&fit=crop',
-    },
-];
 
 const MOCK_BLOGS = [
     {
@@ -117,7 +66,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
             : `${(distanceMeters / 1000).toFixed(1)}km`;
     };
 
-    const fetchNearby = async () => {
+    const fetchNearby = React.useCallback(async () => {
         setIsLoading(true);
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
@@ -141,13 +90,13 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [activeFilter]);
 
     React.useEffect(() => {
         if (activeCategory === 'Places') {
             void fetchNearby();
         }
-    }, [activeFilter, activeCategory]);
+    }, [activeCategory, fetchNearby]);
 
     return (
         <View style={styles.container}>
@@ -290,39 +239,13 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                                         <Text style={styles.placeReviews}>No places found nearby</Text>
                                     </View>
                                 ) : (
-                                    places.map((place) => (
-                                        <TouchableOpacity
-                                            key={place.sourceId}
-                                            style={styles.placeCard}
-                                            onPress={() => navigation.navigate('PlaceDetails', {
-                                                place: {
-                                                    id: place.sourceId,
-                                                    name: place.name || 'Unnamed',
-                                                    distance: formatDistance(place.distanceMeters)
-                                                }
-                                            })}
-                                        >
-                                            <View style={styles.placeImageWrapper}>
-                                                <Image
-                                                    source={{ uri: `https://images.unsplash.com/photo-1540555700478-4be289fbec6d?w=400&h=300&fit=crop` }}
-                                                    style={styles.placeImage}
-                                                />
-                                            </View>
-                                            <Text style={styles.placeName} numberOfLines={1}>{place.name || 'Unnamed place'}</Text>
-                                            <View style={styles.placeInfoRow}>
-                                                <Text style={styles.placeDistance}>{formatDistance(place.distanceMeters)}</Text>
-                                                <Text style={styles.placeRating}>4.5</Text>
-                                                <Text style={{ color: '#F59E0B', fontSize: 12 }}>★</Text>
-                                            </View>
-                                            <View style={styles.tagsRow}>
-                                                <View style={[styles.tag, { backgroundColor: place.accessibility.wheelchair === 'yes' ? '#DEF7EC' : '#FBD5D5' }]}>
-                                                    <Text style={[styles.tagText, { color: place.accessibility.wheelchair === 'yes' ? '#03543F' : '#9B1C1C' }]}>
-                                                        Wheelchair: {place.accessibility.wheelchair}
-                                                    </Text>
-                                                </View>
-                                            </View>
+                                    places.map((place) => {
+                                        const wheelchairValue = place.accessibility?.wheelchair ?? 'unknown';
+
+                                        return (
                                             <TouchableOpacity
-                                                style={styles.directionsBtn}
+                                                key={place.sourceId}
+                                                style={styles.placeCard}
                                                 onPress={() => navigation.navigate('PlaceDetails', {
                                                     place: {
                                                         id: place.sourceId,
@@ -331,10 +254,40 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                                                     }
                                                 })}
                                             >
-                                                <Text style={styles.directionsBtnText}>View Details  ›</Text>
+                                                <View style={styles.placeImageWrapper}>
+                                                    <Image
+                                                        source={{ uri: `https://images.unsplash.com/photo-1540555700478-4be289fbec6d?w=400&h=300&fit=crop` }}
+                                                        style={styles.placeImage}
+                                                    />
+                                                </View>
+                                                <Text style={styles.placeName} numberOfLines={1}>{place.name || 'Unnamed place'}</Text>
+                                                <View style={styles.placeInfoRow}>
+                                                    <Text style={styles.placeDistance}>{formatDistance(place.distanceMeters)}</Text>
+                                                    <Text style={styles.placeRating}>4.5</Text>
+                                                    <Text style={{ color: '#F59E0B', fontSize: 12 }}>★</Text>
+                                                </View>
+                                                <View style={styles.tagsRow}>
+                                                    <View style={[styles.tag, { backgroundColor: wheelchairValue === 'yes' ? '#DEF7EC' : '#FBD5D5' }]}>
+                                                        <Text style={[styles.tagText, { color: wheelchairValue === 'yes' ? '#03543F' : '#9B1C1C' }]}>
+                                                            Wheelchair: {wheelchairValue}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                                <TouchableOpacity
+                                                    style={styles.directionsBtn}
+                                                    onPress={() => navigation.navigate('PlaceDetails', {
+                                                        place: {
+                                                            id: place.sourceId,
+                                                            name: place.name || 'Unnamed',
+                                                            distance: formatDistance(place.distanceMeters)
+                                                        }
+                                                    })}
+                                                >
+                                                    <Text style={styles.directionsBtnText}>View Details  ›</Text>
+                                                </TouchableOpacity>
                                             </TouchableOpacity>
-                                        </TouchableOpacity>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </ScrollView>
                         )}
