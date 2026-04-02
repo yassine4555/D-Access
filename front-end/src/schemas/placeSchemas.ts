@@ -33,6 +33,7 @@ export const wheelchairAccessibilitySchema = z.preprocess(
 
 export const placeAccessibilitySchema = z.object({
   wheelchair: wheelchairAccessibilitySchema.optional(),
+  toiletsWheelchair: z.enum(['yes', 'no', 'unknown']).optional(),
 });
 
 export const nearbyPlaceSchema = z.object({
@@ -59,4 +60,26 @@ export const nearbyPlacesResponseSchema = z.object({
     .optional(),
 });
 
+export const placeDetailsSchema = z.object({
+  sourceId: z.string(),
+  source: z.string(),
+  name: z.string().optional(),
+  category: z.string().optional(),
+  location: z.object({
+    type: z.literal('Point'),
+    coordinates: z.tuple([z.number(), z.number()]),
+  }),
+  accessibility: placeAccessibilitySchema.optional(),
+  tagsSummary: z
+    .object({
+      address: z.string().optional(),
+      website: z.string().optional(),
+      phone: z.string().optional(),
+      openingHours: z.string().optional(),
+    })
+    .optional(),
+  updatedAt: z.string().optional(),
+});
+
 export type NearbyPlaceResponse = z.infer<typeof nearbyPlacesResponseSchema>;
+export type PlaceDetailsResponse = z.infer<typeof placeDetailsSchema>;

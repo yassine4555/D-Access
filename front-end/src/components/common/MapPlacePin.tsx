@@ -11,7 +11,9 @@ import { PartiallyAccessiblePinIcon } from '../icons/PartiallyAccessiblePinIcon'
 type MapPlacePinProps = {
   wheelchair: WheelchairAccessibility;
   category?: string;
+  placeName?: string;
   isSelected?: boolean;
+  showPlaceName?: boolean;
 };
 
 type MarkerVisualConfig = {
@@ -49,12 +51,23 @@ export function getWheelchairPinColor(wheelchair: WheelchairAccessibility): stri
 export const MapPlacePin = memo(function MapPlacePin({
   wheelchair,
   category,
+  placeName,
   isSelected = false,
+  showPlaceName = false,
 }: MapPlacePinProps) {
   const visual = MARKER_VISUALS[wheelchair] ?? MARKER_VISUALS.unknown;
+  const normalizedPlaceName = placeName?.trim();
+  const shouldShowName = Boolean(normalizedPlaceName && (showPlaceName || isSelected));
 
   return (
     <View style={styles.container}>
+      {shouldShowName ? (
+        <View pointerEvents="none" style={styles.nameBadge}>
+          <Text numberOfLines={1} style={styles.nameText}>
+            {normalizedPlaceName}
+          </Text>
+        </View>
+      ) : null}
       {isSelected && category ? (
         <View pointerEvents="none" style={styles.categoryBadge}>
           <Text numberOfLines={1} style={styles.categoryText}>
@@ -76,14 +89,32 @@ export const MapPlacePin = memo(function MapPlacePin({
 
 const styles = StyleSheet.create({
   container: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
+  },
+  nameBadge: {
+    position: 'absolute',
+    bottom: 42,
+    minWidth: 56,
+    maxWidth: 148,
+    backgroundColor: 'rgba(17, 24, 39, 0.88)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  nameText: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: '600',
   },
   categoryBadge: {
     position: 'absolute',
-    bottom: 36,
+    bottom: 62,
     minWidth: 56,
     maxWidth: 132,
     backgroundColor: colors.gray900,

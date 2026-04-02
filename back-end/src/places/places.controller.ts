@@ -3,10 +3,17 @@ import {
   ForbiddenException,
   Get,
   Logger,
+  Param,
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { IngestCityDto } from './dto/ingest-city.dto';
 import { NearbyPlacesDto } from './dto/nearby-places.dto';
 import { SeedPlacesDto } from './dto/seed-places.dto';
@@ -28,6 +35,22 @@ export class PlacesController {
   @ApiResponse({ status: 200, description: 'Nearby places with pagination' })
   findNearby(@Query() query: NearbyPlacesDto) {
     return this.placesService.findNearby(query);
+  }
+
+  @Get('places/:id')
+  @ApiOperation({
+    summary: 'Get place details by id',
+  })
+  @ApiParam({
+    name: 'id',
+    example: 'osm:node:123456789',
+    description:
+      'Place identifier (normalized sourceId like osm:node:123 or Mongo ObjectId)',
+  })
+  @ApiResponse({ status: 200, description: 'Place details payload' })
+  @ApiResponse({ status: 404, description: 'Place not found' })
+  getPlaceById(@Param('id') id: string) {
+    return this.placesService.getPlaceById(id);
   }
 
   @Post('places/seed')

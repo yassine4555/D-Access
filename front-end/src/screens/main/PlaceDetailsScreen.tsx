@@ -1,27 +1,25 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    View,
-    Text,
-    ScrollView,
-    TouchableOpacity,
+    ActivityIndicator,
     Image,
-    StyleSheet,
+    Linking,
+    Platform,
+    ScrollView,
     StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
     Dimensions,
 } from 'react-native';
 import { colors } from '../../constants/colors';
 import { BackIcon } from '../../components/icons/BackIcon';
 import { PlaceDetailsScreenProps } from '../../types/navigation';
 import { openAddReportOnMap } from '../../navigation/navigationRef';
+import { placesApi } from '../../services/api';
+import { PlaceDetails, WheelchairAccessibility } from '../../types/place';
 
 const { width } = Dimensions.get('window');
-
-const ACCESSIBILITY_FEATURES = [
-    { icon: '♿', label: 'Wheelchair', sublabel: 'Accessible', bg: '#D1FAE5' },
-    { icon: '🚻', label: 'Accessible', sublabel: 'Restroom', bg: '#D1FAE5' },
-    { icon: '🅿️', label: 'Accessible', sublabel: 'Parking', bg: '#DBEAFE' },
-    { icon: '🔼', label: 'Ramp', sublabel: 'Available', bg: '#FEF3C7' },
-];
 
 const MOCK_PHOTOS = [
     'https://images.unsplash.com/photo-1559329007-40df8a9345d8?w=200&h=200&fit=crop',
@@ -51,8 +49,65 @@ const MOCK_REVIEWS = [
     },
 ];
 
+function normalizeWheelchair(value?: WheelchairAccessibility): WheelchairAccessibility {
+    if (value === 'yes' || value === 'no' || value === 'limited' || value === 'unknown') {
+        return value;
+    }
+    return 'unknown';
+}
+
+function wheelchairPresentation(value: WheelchairAccessibility): {
+    label: string;
+    bg: string;
+    textColor: string;
+} {
+    if (value === 'yes') {
+        return { label: 'Accessible', bg: '#D1FAE5', textColor: '#10B981' };
+    }
+    if (value === 'no') {
+        return { label: 'Not Accessible', bg: '#FEE2E2', textColor: '#DC2626' };
+    }
+    if (value === 'limited') {
+        return { label: 'Limited Access', bg: '#FEF3C7', textColor: '#D97706' };
+    }
+
+    return { label: 'Unknown', bg: '#E5E7EB', textColor: '#374151' };
+}
+
 export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsScreenProps) {
-    const place = route?.params?.place;
+    const placePreview = route?.params?.place;
+    const sourceId = placePreview?.id;
+
+    const [placeDetails, setPlaceDetails] = useState<PlaceDetails | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [errorText, setErrorText] = useState<string | null>(null);
+
+    const loadPlaceDetails = useCallback(async () => {
+        if (!sourceId) {
+            setErrorText('Missing place id.');
+            setPlaceDetails(null);
+            setIsLoading(false);
+            return;
+        }
+
+        setIsLoading(true);
+        setErrorText(null);
+
+        try {
+            const response = await placesApi.getById(sourceId);
+            setPlaceDetails(response.data as PlaceDetails);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unable to load place details right now.';
+            setErrorText(message);
+            setPlaceDetails(null);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [sourceId]);
+
+    useEffect(() => {
+        void loadPlaceDetails();
+    }, [loadPlaceDetails]);
 
     const handleReportPress = () => {
         if (openAddReportOnMap()) {
@@ -61,47 +116,95 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
         navigation.navigate('MainTabs');
     };
 
+    const wheelchair = normalizeWheelchair(placeDetails?.accessibility?.wheelchair);
+    const badge = wheelchairPresentation(wheelchair);
+
+    const toiletsWheelchair = placeDetails?.accessibility?.toiletsWheelchair;
+    const toiletLabel = toiletsWheelchair === 'yes' ? 'Accessible' : toiletsWheelchair === 'no' ? 'Not Accessible' : 'Unknown';
+
+    const [lon, lat] = placeDetails?.location?.coordinates ?? [];
+    const hasCoordinates = typeof lon === 'number' && typeof lat === 'number';
+
+    const handleDirectionsPress = useCallback(async () => {
+        if (!hasCoordinates) {
+            return;
+        }
+
+        const destinationLabel = encodeURIComponent(placeDetails?.name || 'Destination');
+        const preferredUrl =
+            Platform.OS === 'ios'
+                ? `maps://?daddr=${lat},${lon}&q=${destinationLabel}`
+                : `google.navigation:q=${lat},${lon}`;
+
+        const fallbackUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+
+        try {
+            const canOpenPreferred = await Linking.canOpenURL(preferredUrl);
+            await Linking.openURL(canOpenPreferred ? preferredUrl : fallbackUrl);
+        } catch {
+            await Linking.openURL(fallbackUrl);
+        }
+    }, [hasCoordinates, lat, lon, placeDetails?.name]);
+
+    const placeName = placeDetails?.name?.trim() || placePreview?.name || 'Unnamed place';
+    const category = placeDetails?.category || 'Category unavailable';
+    const address = placeDetails?.tagsSummary?.address || 'Address unavailable';
+    const website = placeDetails?.tagsSummary?.website || 'Website unavailable';
+    const openingHours = placeDetails?.tagsSummary?.openingHours || 'Opening hours unavailable';
+
+    const features = useMemo(
+        () => [
+            { icon: '♿', label: 'Wheelchair', sublabel: badge.label, bg: badge.bg },
+            { icon: '🚻', label: 'Accessible', sublabel: toiletLabel, bg: '#DBEAFE' },
+            { icon: '�️', label: 'Category', sublabel: category, bg: '#FEF3C7' },
+            { icon: '�', label: 'Address', sublabel: address, bg: '#F3E8FF' },
+        ],
+        [address, badge.bg, badge.label, category, toiletLabel],
+    );
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
             <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Hero Image */}
                 <View style={styles.heroContainer}>
                     <View style={styles.heroOverlay}>
-                         
-                        <TouchableOpacity style={[styles.heroBtn, { position: 'absolute', top: 5, right: 16, zIndex: 10 }]} >
+                        <TouchableOpacity style={[styles.heroBtn, { position: 'absolute', top: 5, right: 16, zIndex: 10 }]}
+                        >
                             <Text style={{ fontSize: 14 }}>🔖</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.floatingButton, { position: 'absolute', top: 5, left: 16, zIndex: 10 }]}>
-                                                                  <BackIcon color={colors.gray900} />
-                                         </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => navigation.goBack()}
+                            style={[styles.floatingButton, { position: 'absolute', top: 5, left: 16, zIndex: 10 }]}
+                        >
+                            <BackIcon color={colors.gray900} />
+                        </TouchableOpacity>
                     </View>
                     <Image
                         source={{
-                            uri: place?.image || 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=600&h=300&fit=crop',
+                            uri: placePreview?.image || 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=600&h=300&fit=crop',
                         }}
                         style={styles.heroImage}
                     />
-                    
+
                     <View style={styles.heroBottom}>
-                        <Text style={styles.heroName}>{place?.name || 'Coffee Shop'}</Text>
+                        <Text style={styles.heroName}>{placeName}</Text>
                         <View style={styles.heroRating}>
                             <Text style={{ color: '#F59E0B' }}>★★★★★</Text>
                             <Text style={styles.heroReviewCount}> 100 reviews</Text>
                         </View>
                     </View>
-                    <View style={styles.accessibleBadge}>
+                    <View style={[styles.accessibleBadge, { backgroundColor: badge.bg }]}
+                    >
                         <Text style={{ fontSize: 12, marginRight: 4 }}>♿</Text>
-                        <Text style={styles.accessibleText}>Accessible</Text>
+                        <Text style={[styles.accessibleText, { color: badge.textColor }]}>{badge.label}</Text>
                     </View>
                 </View>
 
-                {/* Info Section */}
                 <View style={styles.infoSection}>
                     <View style={styles.addressRow}>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.address}>27 Whitcomb Street</Text>
-                            <Text style={styles.city}>London</Text>
+                            <Text style={styles.address}>{address}</Text>
+                            <Text style={styles.city}>{category}</Text>
                         </View>
                         <TouchableOpacity style={styles.phoneBtn}>
                             <Text style={{ fontSize: 16 }}>📞</Text>
@@ -112,41 +215,40 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
                     </View>
                     <View style={styles.websiteRow}>
                         <Text style={{ marginRight: 6 }}>🌐</Text>
-                        <Text style={styles.websiteText}>www.gemluxuryspa.co.uk</Text>
+                        <Text style={styles.websiteText}>{website}</Text>
                     </View>
                     <Text style={styles.hoursText}>
                         <Text style={{ color: '#10B981', fontWeight: '600' }}>Open: </Text>
-                        From 8:00 AM To 8:00 PM
+                        {openingHours}
                     </Text>
                 </View>
 
-                {/* Accessibility */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Accessibility</Text>
                     <View style={styles.featuresGrid}>
-                        {ACCESSIBILITY_FEATURES.map((feat, idx) => (
-                            <View key={idx} style={[styles.featureCard, { backgroundColor: feat.bg }]}>
+                        {features.map((feat, idx) => (
+                            <View key={idx} style={[styles.featureCard, { backgroundColor: feat.bg }]}
+                            >
                                 <Text style={{ fontSize: 22, marginRight: 8 }}>{feat.icon}</Text>
-                                <View>
+                                <View style={{ flexShrink: 1 }}>
                                     <Text style={styles.featureLabel}>{feat.label}</Text>
-                                    <Text style={styles.featureSublabel}>{feat.sublabel}</Text>
+                                    <Text style={styles.featureSublabel} numberOfLines={1}>{feat.sublabel}</Text>
                                 </View>
                             </View>
                         ))}
                     </View>
                 </View>
 
-                {/* Report Card */}
                 <View style={styles.reportCard}>
-                    <View style={[styles.reportBadge, { backgroundColor: '#D1FAE5' }]}>
+                    <View style={[styles.reportBadge, { backgroundColor: badge.bg }]}
+                    >
                         <Text style={{ fontSize: 12, marginRight: 4 }}>♿</Text>
-                        <Text style={{ color: '#10B981', fontWeight: '600', fontSize: 12 }}>Accessible</Text>
+                        <Text style={{ color: badge.textColor, fontWeight: '600', fontSize: 12 }}>{badge.label}</Text>
                     </View>
-                    <Text style={styles.reportSubmitted}>Report Submitted By Mark M.</Text>
-                    <Text style={styles.reportMeta}>Submitted 2 Days ago  •  350 ft away</Text>
+                    <Text style={styles.reportSubmitted}>Source ID: {placeDetails?.sourceId || placePreview?.id || 'N/A'}</Text>
+                    <Text style={styles.reportMeta}>Last update: {placeDetails?.updatedAt ? new Date(placeDetails.updatedAt).toLocaleDateString() : 'Unknown'}</Text>
                 </View>
 
-                {/* Photos */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Photos</Text>
                     <View style={styles.photosGrid}>
@@ -159,7 +261,6 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
                     </TouchableOpacity>
                 </View>
 
-                {/* Reviews */}
                 <View style={styles.section}>
                     <View style={styles.reviewsHeader}>
                         <Text style={styles.sectionTitle}>Accessibility Reviews</Text>
@@ -169,6 +270,20 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
                             <Text style={styles.ratingCount}> (24)</Text>
                         </View>
                     </View>
+
+                    {isLoading ? (
+                        <View style={styles.stateRow}>
+                            <ActivityIndicator size="small" color={colors.primary} />
+                            <Text style={styles.stateRowText}>Loading place details...</Text>
+                        </View>
+                    ) : errorText ? (
+                        <View style={styles.stateRow}>
+                            <Text style={styles.errorText}>{errorText}</Text>
+                            <TouchableOpacity onPress={() => void loadPlaceDetails()}>
+                                <Text style={styles.readAll}>Try again</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : null}
 
                     {MOCK_REVIEWS.map((review) => (
                         <View key={review.id} style={styles.reviewCard}>
@@ -201,16 +316,21 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
                     ))}
                 </View>
 
-                {/* Action Buttons */}
                 <View style={styles.actionsSection}>
                     <TouchableOpacity
                         style={styles.writeReviewBtn}
-                        onPress={() => navigation.navigate('WriteReview', { place })}
+                        onPress={() => navigation.navigate('WriteReview', { place: placePreview })}
                     >
                         <Text style={styles.writeReviewText}>Write Review</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.directionsLink}>
-                        <Text style={styles.directionsLinkText}>Get Directions on Google maps</Text>
+                    <TouchableOpacity
+                        style={[styles.directionsLink, !hasCoordinates && styles.disabledDirectionsLink]}
+                        onPress={() => void handleDirectionsPress()}
+                        disabled={!hasCoordinates}
+                    >
+                        <Text style={[styles.directionsLinkText, !hasCoordinates && styles.disabledDirectionsLinkText]}>
+                            Get Directions on Google maps
+                        </Text>
                     </TouchableOpacity>
                 </View>
 
@@ -225,7 +345,6 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.white,
     },
-    // Hero
     heroContainer: {
         height: 240,
         position: 'relative',
@@ -249,16 +368,17 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.9)',
         alignItems: 'center',
         justifyContent: 'center',
-    },  floatingButton: {
-  backgroundColor: '#fff',       // make sure button has background
-  padding: 10,
-  borderRadius: 25,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 3,
-  elevation: 5,                  // for Android
-},
+    },
+    floatingButton: {
+        backgroundColor: '#fff',
+        padding: 10,
+        borderRadius: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 5,
+    },
     heroBottom: {
         position: 'absolute',
         bottom: 14,
@@ -287,17 +407,14 @@ const styles = StyleSheet.create({
         right: 16,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#D1FAE5',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 14,
     },
     accessibleText: {
-        color: '#10B981',
         fontSize: 12,
         fontWeight: '600',
     },
-    // Info
     infoSection: {
         paddingHorizontal: 16,
         paddingTop: 16,
@@ -352,7 +469,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: colors.gray700,
     },
-    // Sections
     section: {
         paddingHorizontal: 16,
         paddingTop: 16,
@@ -363,7 +479,6 @@ const styles = StyleSheet.create({
         color: colors.gray900,
         marginBottom: 12,
     },
-    // Features
     featuresGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -385,7 +500,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: colors.gray600,
     },
-    // Report
     reportCard: {
         marginHorizontal: 16,
         marginTop: 16,
@@ -414,7 +528,6 @@ const styles = StyleSheet.create({
         color: colors.gray500,
         marginTop: 4,
     },
-    // Photos
     photosGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -437,7 +550,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 14,
     },
-    // Reviews
     reviewsHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -456,6 +568,22 @@ const styles = StyleSheet.create({
     ratingCount: {
         fontSize: 14,
         color: colors.gray500,
+    },
+    stateRow: {
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.gray100,
+        marginBottom: 12,
+    },
+    stateRowText: {
+        marginTop: 8,
+        color: colors.gray600,
+        fontSize: 13,
+    },
+    errorText: {
+        color: '#B91C1C',
+        fontSize: 13,
     },
     reviewCard: {
         padding: 14,
@@ -513,7 +641,6 @@ const styles = StyleSheet.create({
         color: colors.gray500,
         marginTop: 8,
     },
-    // Actions
     actionsSection: {
         paddingHorizontal: 16,
         paddingTop: 16,
@@ -541,5 +668,11 @@ const styles = StyleSheet.create({
         color: colors.primary,
         fontWeight: '600',
         fontSize: 14,
+    },
+    disabledDirectionsLink: {
+        borderColor: colors.gray300,
+    },
+    disabledDirectionsLinkText: {
+        color: colors.gray400,
     },
 });

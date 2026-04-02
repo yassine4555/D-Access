@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -37,10 +39,11 @@ type ReportItem = {
   distance: string;
 };
 
-const FILTER_CHIPS = ['All', 'Entrance', 'Toilet', 'Elevator', 'Parking'];
+const FILTER_CHIPS = ['All', 'Wheelchair', 'Entrance', 'Toilet', 'Elevator', 'Parking'];
 
 const CHIP_TO_CATEGORY: Record<string, string | undefined> = {
   All: undefined,
+  Wheelchair: undefined,
   Entrance: 'entrance',
   Toilet: 'toilets',
   Elevator: 'elevator',
@@ -55,6 +58,7 @@ const FALLBACK_REGION: Region = {
 };
 
 const DEFAULT_RADIUS_METERS = 5000;
+const DISTANCE_PRESETS_METERS = [500, 1000, 1500, 2500, 5000] as const;
 const DEFAULT_LIMIT = 30;
 const TILE_URL_TEMPLATE =
   process.env.EXPO_PUBLIC_TILE_URL ||
@@ -74,6 +78,74 @@ function formatDistance(distanceMeters?: number): string {
   return `${(distanceMeters / 1000).toFixed(1)} Km`;
 }
 
+type ClusteredMarker = {
+  key: string;
+  latitude: number;
+  longitude: number;
+  count: number;
+  places: NearbyPlace[];
+};
+
+type MarkerRenderItem =
+  | { kind: 'place'; place: NearbyPlace }
+  | { kind: 'cluster'; cluster: ClusteredMarker };
+
+function buildClusteredMarkers(
+  sourcePlaces: NearbyPlace[],
+  region: Region,
+): MarkerRenderItem[] {
+  const latStep = Math.max(region.latitudeDelta / 28, 0.0004);
+  const lonStep = Math.max(region.longitudeDelta / 28, 0.0004);
+  const buckets = new Map<string, NearbyPlace[]>();
+
+  sourcePlaces.forEach((place) => {
+    const [lon, lat] = place.location.coordinates;
+    const latBucket = Math.floor((lat + 90) / latStep);
+    const lonBucket = Math.floor((lon + 180) / lonStep);
+    const key = `${latBucket}:${lonBucket}`;
+
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(place);
+    } else {
+      buckets.set(key, [place]);
+    }
+  });
+
+  const result: MarkerRenderItem[] = [];
+
+  buckets.forEach((bucketPlaces, key) => {
+    if (bucketPlaces.length === 1) {
+      result.push({ kind: 'place', place: bucketPlaces[0] });
+      return;
+    }
+
+    const totals = bucketPlaces.reduce(
+      (acc, place) => {
+        const [lon, lat] = place.location.coordinates;
+        return {
+          lat: acc.lat + lat,
+          lon: acc.lon + lon,
+        };
+      },
+      { lat: 0, lon: 0 },
+    );
+
+    result.push({
+      kind: 'cluster',
+      cluster: {
+        key,
+        latitude: totals.lat / bucketPlaces.length,
+        longitude: totals.lon / bucketPlaces.length,
+        count: bucketPlaces.length,
+        places: bucketPlaces,
+      },
+    });
+  });
+
+  return result;
+}
+
 const BADGE_STYLES: Record<
   ReportItem['status'],
   { bg: string; text: string; label: string }
@@ -87,10 +159,19 @@ type FetchPlacesOptions = {
   showLoader?: boolean;
 };
 
+type AccessibilityFilterMode = 'all' | 'yes' | 'known';
+
+type NearbyApiFilters = {
+  wheelchair?: WheelchairAccessibility;
+  toiletsWheelchair?: 'yes' | 'no' | 'unknown';
+  wheelchairKnown?: boolean;
+};
+
 type PlaceMarkerProps = {
   place: NearbyPlace;
   wheelchair: WheelchairAccessibility;
   isSelected: boolean;
+  showPlaceName: boolean;
   onMarkerPress: (place: NearbyPlace) => void;
 };
 
@@ -99,6 +180,7 @@ const PlaceMarker = React.memo(
     place,
     wheelchair,
     isSelected,
+    showPlaceName,
     onMarkerPress,
   }: PlaceMarkerProps) {
     const [lng, lat] = place.location.coordinates;
@@ -123,7 +205,7 @@ const PlaceMarker = React.memo(
       return () => {
         clearTimeout(timer);
       };
-    }, [isSelected, place.category, wheelchair]);
+    }, [isSelected, place.category, showPlaceName, wheelchair]);
 
     return (
       <Marker
@@ -135,7 +217,9 @@ const PlaceMarker = React.memo(
         <MapPlacePin
           wheelchair={wheelchair}
           category={place.category}
+          placeName={place.name}
           isSelected={isSelected}
+          showPlaceName={showPlaceName}
         />
       </Marker>
     );
@@ -143,6 +227,7 @@ const PlaceMarker = React.memo(
   (prev, next) =>
     prev.place.sourceId === next.place.sourceId &&
     prev.isSelected === next.isSelected &&
+    prev.showPlaceName === next.showPlaceName &&
     prev.wheelchair === next.wheelchair &&
     prev.place.category === next.place.category &&
     prev.onMarkerPress === next.onMarkerPress,
@@ -150,6 +235,20 @@ const PlaceMarker = React.memo(
 
 export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
   const [activeFilter, setActiveFilter] = useState('All');
+  const [wheelchairFilterMode, setWheelchairFilterMode] =
+    useState<AccessibilityFilterMode>('all');
+  const [toiletsAccessibleOnly, setToiletsAccessibleOnly] = useState(false);
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [searchRadiusMeters, setSearchRadiusMeters] =
+    useState<number>(DEFAULT_RADIUS_METERS);
+  const [draftActiveFilter, setDraftActiveFilter] = useState('All');
+  const [draftWheelchairFilterMode, setDraftWheelchairFilterMode] =
+    useState<AccessibilityFilterMode>('all');
+  const [draftToiletsAccessibleOnly, setDraftToiletsAccessibleOnly] = useState(false);
+  const [draftSearchRadiusMeters, setDraftSearchRadiusMeters] =
+    useState<number>(DEFAULT_RADIUS_METERS);
+  const [shouldShowSearchArea, setShouldShowSearchArea] = useState(false);
+  const [pendingRegion, setPendingRegion] = useState<Region | null>(null);
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -158,12 +257,59 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
   const [searchQuery, setSearchQuery] = useState('');
   // Reports will be populated once a reports API is available
   const [reports] = useState<ReportItem[]>([]);
+  const [visibleRegion, setVisibleRegion] = useState<Region>(FALLBACK_REGION);
 
   const mapRef = useRef<MapView | null>(null);
+  const searchRadiusRef = useRef<number>(DEFAULT_RADIUS_METERS);
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchAreaRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const lastRegionRef = useRef<Region>(FALLBACK_REGION);
   const currentRegionRef = useRef<Region>(FALLBACK_REGION);
   const fetchSequenceRef = useRef(0);
+
+  const radiusKmText = useMemo(
+    () => `${(draftSearchRadiusMeters / 1000).toFixed(1)} Km`,
+    [draftSearchRadiusMeters],
+  );
+
+  useEffect(() => {
+    searchRadiusRef.current = searchRadiusMeters;
+  }, [searchRadiusMeters]);
+
+  useEffect(() => {
+    if (!isFilterModalVisible) {
+      return;
+    }
+
+    setDraftActiveFilter(activeFilter);
+    setDraftWheelchairFilterMode(wheelchairFilterMode);
+    setDraftToiletsAccessibleOnly(toiletsAccessibleOnly);
+    setDraftSearchRadiusMeters(searchRadiusMeters);
+  }, [
+    activeFilter,
+    isFilterModalVisible,
+    searchRadiusMeters,
+    toiletsAccessibleOnly,
+    wheelchairFilterMode,
+  ]);
+
+  const buildNearbyApiFilters = useCallback((): NearbyApiFilters => {
+    const filters: NearbyApiFilters = {};
+
+    if (wheelchairFilterMode === 'yes') {
+      filters.wheelchair = 'yes';
+    } else if (wheelchairFilterMode === 'known') {
+      filters.wheelchairKnown = true;
+    }
+
+    if (toiletsAccessibleOnly) {
+      filters.toiletsWheelchair = 'yes';
+    }
+
+    return filters;
+  }, [toiletsAccessibleOnly, wheelchairFilterMode]);
 
   const hasMeaningfulRegionChange = (nextRegion: Region) => {
     const previous = lastRegionRef.current;
@@ -178,14 +324,18 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
       region: Region,
       category?: string,
       options: FetchPlacesOptions = { showLoader: true },
+      filters?: NearbyApiFilters,
     ) => {
       const showLoader = options.showLoader ?? true;
       const requestSequence = ++fetchSequenceRef.current;
       const cacheKey = createNearbyPlacesCacheKey({
         region,
-        radiusMeters: DEFAULT_RADIUS_METERS,
+        radiusMeters: searchRadiusRef.current,
         limit: DEFAULT_LIMIT,
         category,
+        wheelchair: filters?.wheelchair,
+        toiletsWheelchair: filters?.toiletsWheelchair,
+        wheelchairKnown: filters?.wheelchairKnown,
       });
 
       const cachedPlaces = getCachedNearbyPlaces<NearbyPlace[]>(cacheKey);
@@ -210,10 +360,11 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
         const response = await placesApi.findNearby(
           region.latitude,
           region.longitude,
-          DEFAULT_RADIUS_METERS,
+          searchRadiusRef.current,
           1,
           DEFAULT_LIMIT,
           category,
+          filters,
         );
 
         if (requestSequence !== fetchSequenceRef.current) {
@@ -256,7 +407,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
         const { status } = await Location.requestForegroundPermissionsAsync();
 
         if (status !== 'granted') {
-          await fetchPlaces(FALLBACK_REGION, undefined);
+          await fetchPlaces(FALLBACK_REGION, undefined, { showLoader: true });
           return;
         }
 
@@ -274,11 +425,13 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
 
         currentRegionRef.current = nextRegion;
         lastRegionRef.current = nextRegion;
+        setVisibleRegion(nextRegion);
         mapRef.current?.animateToRegion(nextRegion, 500);
         await fetchPlaces(nextRegion, undefined, { showLoader: true });
       } catch {
         currentRegionRef.current = FALLBACK_REGION;
         lastRegionRef.current = FALLBACK_REGION;
+        setVisibleRegion(FALLBACK_REGION);
         await fetchPlaces(FALLBACK_REGION, undefined, { showLoader: true });
       }
     };
@@ -290,13 +443,29 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
       if (fetchTimerRef.current) {
         clearTimeout(fetchTimerRef.current);
       }
+      if (searchAreaRevealTimerRef.current) {
+        clearTimeout(searchAreaRevealTimerRef.current);
+      }
     };
   }, [fetchPlaces]);
 
   useEffect(() => {
     const category = CHIP_TO_CATEGORY[activeFilter];
-    void fetchPlaces(currentRegionRef.current, category, { showLoader: true });
-  }, [activeFilter, fetchPlaces]);
+    const filters = buildNearbyApiFilters();
+    setShouldShowSearchArea(false);
+    setPendingRegion(null);
+    void fetchPlaces(currentRegionRef.current, category, { showLoader: true }, filters);
+  }, [activeFilter, buildNearbyApiFilters, fetchPlaces]);
+
+  const handleSearchThisArea = useCallback(() => {
+    const regionToFetch = pendingRegion ?? currentRegionRef.current;
+    const category = CHIP_TO_CATEGORY[activeFilter];
+    const filters = buildNearbyApiFilters();
+
+    setShouldShowSearchArea(false);
+    setPendingRegion(null);
+    void fetchPlaces(regionToFetch, category, { showLoader: true }, filters);
+  }, [activeFilter, buildNearbyApiFilters, fetchPlaces, pendingRegion]);
 
   const onRegionChangeComplete = (region: Region) => {
     if (!hasMeaningfulRegionChange(region)) {
@@ -305,14 +474,20 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
 
     lastRegionRef.current = region;
     currentRegionRef.current = region;
+    setVisibleRegion(region);
 
     if (fetchTimerRef.current) {
       clearTimeout(fetchTimerRef.current);
     }
+    if (searchAreaRevealTimerRef.current) {
+      clearTimeout(searchAreaRevealTimerRef.current);
+    }
 
     fetchTimerRef.current = setTimeout(() => {
-      const category = CHIP_TO_CATEGORY[activeFilter];
-      void fetchPlaces(region, category, { showLoader: false });
+      setPendingRegion(region);
+      searchAreaRevealTimerRef.current = setTimeout(() => {
+        setShouldShowSearchArea(true);
+      }, 150);
     }, 600);
   };
 
@@ -328,15 +503,23 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
 
       currentRegionRef.current = nextRegion;
       lastRegionRef.current = nextRegion;
+      setVisibleRegion(nextRegion);
+      setShouldShowSearchArea(false);
+      setPendingRegion(null);
       mapRef.current?.animateToRegion(nextRegion, 500);
       const category = CHIP_TO_CATEGORY[activeFilter];
-      await fetchPlaces(nextRegion, category, { showLoader: false });
+      const filters = buildNearbyApiFilters();
+      await fetchPlaces(nextRegion, category, { showLoader: false }, filters);
     } catch {
       currentRegionRef.current = FALLBACK_REGION;
       lastRegionRef.current = FALLBACK_REGION;
+      setVisibleRegion(FALLBACK_REGION);
+      setShouldShowSearchArea(false);
+      setPendingRegion(null);
       mapRef.current?.animateToRegion(FALLBACK_REGION, 500);
       const category = CHIP_TO_CATEGORY[activeFilter];
-      await fetchPlaces(FALLBACK_REGION, category, { showLoader: false });
+      const filters = buildNearbyApiFilters();
+      await fetchPlaces(FALLBACK_REGION, category, { showLoader: false }, filters);
     }
   };
 
@@ -392,23 +575,50 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
 
   const handleMarkerPress = useCallback(
     (place: NearbyPlace) => {
-      setSelectedPlaceId((previousSelectedPlaceId) => {
-        if (previousSelectedPlaceId === place.sourceId) {
-          navigation.navigate('PlaceDetails', {
-            place: {
-              id: place.sourceId,
-              name: place.name || 'Unnamed place',
-              distance: formatDistance(place.distanceMeters),
-            },
-          });
-          return previousSelectedPlaceId;
-        }
+      if (selectedPlaceId === place.sourceId) {
+        navigation.navigate('PlaceDetails', {
+          place: {
+            id: place.sourceId,
+            name: place.name || 'Unnamed place',
+            distance: formatDistance(place.distanceMeters),
+          },
+        });
+        return;
+      }
 
-        return place.sourceId;
-      });
+      setSelectedPlaceId(place.sourceId);
     },
-    [navigation],
+    [navigation, selectedPlaceId],
   );
+
+  const shouldClusterMarkers =
+    filteredPlaces.length >= 40 &&
+    (visibleRegion.latitudeDelta > 0.008 || visibleRegion.longitudeDelta > 0.008);
+
+  const renderedMarkers = useMemo(() => {
+    if (!shouldClusterMarkers) {
+      return filteredPlaces.map((place) => ({
+        kind: 'place' as const,
+        place,
+      }));
+    }
+
+    return buildClusteredMarkers(filteredPlaces, visibleRegion);
+  }, [filteredPlaces, shouldClusterMarkers, visibleRegion]);
+
+  const handleClusterPress = useCallback((cluster: ClusteredMarker) => {
+    const nextRegion: Region = {
+      latitude: cluster.latitude,
+      longitude: cluster.longitude,
+      latitudeDelta: Math.max(visibleRegion.latitudeDelta * 0.5, 0.004),
+      longitudeDelta: Math.max(visibleRegion.longitudeDelta * 0.5, 0.004),
+    };
+
+    mapRef.current?.animateToRegion(nextRegion, 280);
+  }, [visibleRegion.latitudeDelta, visibleRegion.longitudeDelta]);
+
+  const isZoomedInForLabel =
+    visibleRegion.latitudeDelta <= 0.018 && visibleRegion.longitudeDelta <= 0.018;
 
   return (
     <View style={styles.container}>
@@ -427,15 +637,38 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           mapType="none"
         >
           <UrlTile urlTemplate={TILE_URL_TEMPLATE} maximumZ={19} flipY={false} />
-          {filteredPlaces.map((place) => {
+          {renderedMarkers.map((item) => {
+            if (item.kind === 'place') {
+              const { place } = item;
+
+              return (
+                <PlaceMarker
+                  key={place.sourceId}
+                  place={place}
+                  wheelchair={resolveWheelchair(place)}
+                  isSelected={selectedPlaceId === place.sourceId}
+                  showPlaceName={isZoomedInForLabel || selectedPlaceId === place.sourceId}
+                  onMarkerPress={handleMarkerPress}
+                />
+              );
+            }
+
+            const { cluster } = item;
+
             return (
-              <PlaceMarker
-                key={place.sourceId}
-                place={place}
-                wheelchair={resolveWheelchair(place)}
-                isSelected={selectedPlaceId === place.sourceId}
-                onMarkerPress={handleMarkerPress}
-              />
+              <Marker
+                key={`cluster:${cluster.key}`}
+                coordinate={{
+                  latitude: cluster.latitude,
+                  longitude: cluster.longitude,
+                }}
+                anchor={{ x: 0.5, y: 0.5 }}
+                onPress={() => handleClusterPress(cluster)}
+              >
+                <View style={styles.clusterBubble}>
+                  <Text style={styles.clusterText}>{cluster.count}</Text>
+                </View>
+              </Marker>
             );
           })}
         </MapView>
@@ -480,6 +713,15 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           <Text style={styles.reportBtnText}>+ Report</Text>
         </TouchableOpacity>
 
+        {shouldShowSearchArea ? (
+          <TouchableOpacity
+            style={styles.searchAreaBtn}
+            onPress={handleSearchThisArea}
+          >
+            <Text style={styles.searchAreaBtnText}>Search this area</Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Attribution */}
         <View style={styles.attribution}>
           <Text style={styles.attributionText}>© OpenStreetMap • © CARTO</Text>
@@ -517,7 +759,10 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
             />
             <MicrophoneIcon color={colors.gray500} style={styles.micIcon} />
           </View>
-          <TouchableOpacity style={styles.filterBtn}>
+          <TouchableOpacity
+            style={styles.filterBtn}
+            onPress={() => setIsFilterModalVisible(true)}
+          >
             <FilterIcon color={colors.white} />
           </TouchableOpacity>
         </View>
@@ -530,12 +775,31 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           contentContainerStyle={styles.chipsRow}
         >
           {FILTER_CHIPS.map((chip) => {
+            const isWheelchairChip = chip === 'Wheelchair';
             const isActive = activeFilter === chip;
+
             return (
               <TouchableOpacity
                 key={chip}
                 style={[styles.chip, isActive && styles.chipActive]}
-                onPress={() => setActiveFilter(chip)}
+                onPress={() => {
+                  if (isWheelchairChip) {
+                    if (activeFilter === 'Wheelchair') {
+                      setActiveFilter('All');
+                      setWheelchairFilterMode('all');
+                    } else {
+                      setActiveFilter('Wheelchair');
+                      setWheelchairFilterMode('yes');
+                    }
+                    return;
+                  }
+
+                  if (activeFilter === 'Wheelchair' && wheelchairFilterMode === 'yes') {
+                    setWheelchairFilterMode('all');
+                  }
+
+                  setActiveFilter(chip);
+                }}
               >
                 {chip === 'All' && (
                   <ChipsIcon
@@ -581,9 +845,10 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
                 style={[styles.retryBtn, { marginTop: 10 }]}
                 onPress={() => {
                   const category = CHIP_TO_CATEGORY[activeFilter];
+                  const filters = buildNearbyApiFilters();
                   void fetchPlaces(currentRegionRef.current, category, {
                     showLoader: true,
-                  });
+                  }, filters);
                 }}
               >
                 <Text style={styles.retryBtnText}>Try again</Text>
@@ -674,6 +939,238 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
 
         </ScrollView>
       </View>
+
+      <Modal
+        visible={isFilterModalVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setIsFilterModalVisible(false)}
+      >
+        <View style={styles.filterModalRoot}>
+          <StatusBar barStyle="dark-content" />
+
+          <View style={styles.filterHeader}>
+            <TouchableOpacity
+              style={styles.filterHeaderBackBtn}
+              onPress={() => setIsFilterModalVisible(false)}
+            >
+              <BackIcon color={colors.gray900} />
+            </TouchableOpacity>
+            <Text style={styles.filterHeaderTitle}>Filter</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setDraftActiveFilter('All');
+                setDraftWheelchairFilterMode('all');
+                setDraftToiletsAccessibleOnly(false);
+                setDraftSearchRadiusMeters(DEFAULT_RADIUS_METERS);
+              }}
+            >
+              <Text style={styles.filterResetText}>Reset</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.filterSearchBox}>
+              <SearchIcon color="#CAC9C9" />
+              <Text style={styles.filterSearchPlaceholder}>Search</Text>
+              <MicrophoneIcon color="#CAC9C9" />
+            </View>
+
+            <View style={styles.filterRouteCard}>
+              <View style={styles.filterRoutePathColumn}>
+                <View style={styles.filterRouteDot} />
+                <View style={styles.filterRouteDashedLine} />
+                <View style={styles.filterRoutePin} />
+              </View>
+              <View style={styles.filterRouteTextColumn}>
+                <View style={styles.filterRouteRowTop}>
+                  <Text style={styles.filterRouteText}>Current location</Text>
+                </View>
+                <View style={styles.filterRouteRowBottom}>
+                  <Text style={styles.filterRouteText}>Where are you going?</Text>
+                </View>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.filterOptionCard,
+                draftWheelchairFilterMode === 'yes' && styles.filterOptionCardActive,
+              ]}
+            >
+              <View
+                style={
+                  draftWheelchairFilterMode === 'yes'
+                    ? styles.filterOptionLeftIconWrapActive
+                    : styles.filterOptionLeftIconWrap
+                }
+              >
+                <Text style={styles.filterOptionIconText}>♿</Text>
+              </View>
+              <View style={styles.filterOptionTextWrap}>
+                <Text style={styles.filterOptionTitle}>Step Free Access</Text>
+                <Text style={styles.filterOptionSubtitle}>No stairs or high curbs</Text>
+              </View>
+              <Switch
+                value={draftWheelchairFilterMode === 'yes'}
+                onValueChange={(value) =>
+                  setDraftWheelchairFilterMode(value ? 'yes' : 'all')
+                }
+                trackColor={{ false: '#D2D5DA', true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            <View
+              style={[
+                styles.filterOptionCard,
+                draftToiletsAccessibleOnly && styles.filterOptionCardActive,
+              ]}
+            >
+              <View style={styles.filterOptionLeftIconWrap}>
+                <Text style={styles.filterOptionIconText}>↗</Text>
+              </View>
+              <View style={styles.filterOptionTextWrap}>
+                <Text style={styles.filterOptionTitle}>Ramp Access</Text>
+                <Text style={styles.filterOptionSubtitle}>No stairs or high curbs</Text>
+              </View>
+              <Switch
+                value={draftToiletsAccessibleOnly}
+                onValueChange={(value) => setDraftToiletsAccessibleOnly(value)}
+                trackColor={{ false: '#D2D5DA', true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            <View
+              style={[
+                styles.filterOptionCard,
+                draftWheelchairFilterMode === 'known' &&
+                  styles.filterOptionCardActive,
+              ]}
+            >
+              <View style={styles.filterOptionLeftIconWrap}>
+                <Text style={styles.filterOptionIconText}>⇅</Text>
+              </View>
+              <View style={styles.filterOptionTextWrap}>
+                <Text style={styles.filterOptionTitle}>Elevator Available</Text>
+                <Text style={styles.filterOptionSubtitle}>Required for multi-floor</Text>
+              </View>
+              <Switch
+                value={draftWheelchairFilterMode === 'known'}
+                onValueChange={(value) =>
+                  setDraftWheelchairFilterMode(value ? 'known' : 'all')
+                }
+                trackColor={{ false: '#D2D5DA', true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            <View style={styles.filterDistanceHeader}>
+              <Text style={styles.filterDistanceTitle}>Travel Distance</Text>
+              <Text style={styles.filterDistanceValue}>{radiusKmText}</Text>
+            </View>
+
+            <View style={styles.filterDistanceCard}>
+              <View style={styles.filterDistanceTrackBackground}>
+                <View
+                  style={[
+                    styles.filterDistanceTrackProgress,
+                    {
+                      width: `${
+                        ((draftSearchRadiusMeters - DISTANCE_PRESETS_METERS[0]) /
+                          (DISTANCE_PRESETS_METERS[DISTANCE_PRESETS_METERS.length - 1] -
+                            DISTANCE_PRESETS_METERS[0])) *
+                        100
+                      }%`,
+                    },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.filterDistancePresetRow}>
+                {DISTANCE_PRESETS_METERS.map((distance) => {
+                  const isActive = distance === draftSearchRadiusMeters;
+                  return (
+                    <TouchableOpacity
+                      key={distance}
+                      style={styles.filterDistancePresetBtn}
+                      onPress={() => setDraftSearchRadiusMeters(distance)}
+                    >
+                      <View
+                        style={[
+                          styles.filterDistancePresetDot,
+                          isActive && styles.filterDistancePresetDotActive,
+                        ]}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.filterDistanceLabelsRow}>
+                <Text style={styles.filterDistanceLabel}>0.5Km</Text>
+                <Text style={styles.filterDistanceEnergyLabel}>Energy Server</Text>
+                <Text style={styles.filterDistanceLabel}>5Km</Text>
+              </View>
+            </View>
+
+            <Text style={styles.filterFacilitiesTitle}>Facilities</Text>
+            <View style={styles.filterFacilitiesRow}>
+              {['Parking', 'Restaurant', 'Restroom'].map((facility) => {
+                const chipName =
+                  facility === 'Restaurant'
+                    ? 'Elevator'
+                    : facility === 'Restroom'
+                      ? 'Toilet'
+                      : facility;
+                const isActive = draftActiveFilter === chipName;
+
+                return (
+                  <TouchableOpacity
+                    key={facility}
+                    style={[
+                      styles.filterFacilityChip,
+                      isActive && styles.filterFacilityChipActive,
+                    ]}
+                    onPress={() =>
+                      setDraftActiveFilter(isActive ? 'All' : chipName)
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.filterFacilityChipText,
+                        isActive && styles.filterFacilityChipTextActive,
+                      ]}
+                    >
+                      {facility}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={styles.filterDoneBtn}
+              onPress={() => {
+                setActiveFilter(draftActiveFilter);
+                setWheelchairFilterMode(draftWheelchairFilterMode);
+                setToiletsAccessibleOnly(draftToiletsAccessibleOnly);
+                setSearchRadiusMeters(draftSearchRadiusMeters);
+                setIsFilterModalVisible(false);
+                setShouldShowSearchArea(false);
+                setPendingRegion(null);
+              }}
+            >
+              <Text style={styles.filterDoneBtnText}>Apply Filters</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -775,6 +1272,41 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 12,
   },
+  clusterBubble: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#0F172A',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  clusterText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  searchAreaBtn: {
+    position: 'absolute',
+    alignSelf: 'center',
+    bottom: 84,
+    backgroundColor: '#0F172A',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  searchAreaBtnText: {
+    color: '#FDFDFD',
+    fontWeight: '600',
+    fontSize: 13,
+  },
   attribution: {
     position: 'absolute',
     left: 10,
@@ -809,7 +1341,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FDFDFD',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    marginTop: -24,
+    marginTop: -28,//28 bech tna9s l'espace ben map w sheet w t5alle lhandle yb9a visible w y3ti effect zwin
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowRadius: 16,
@@ -910,7 +1442,6 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: '#FDFDFD',
   },
-
   // Scroll area
   scrollContent: {
     flex: 1,
@@ -1071,5 +1602,284 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: '#6B7280',
+  },
+
+  // ── Filter Modal ──
+  filterModalRoot: {
+    flex: 1,
+    backgroundColor: '#FDFDFD',
+  },
+  filterHeader: {
+    paddingTop: 54,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  filterHeaderBackBtn: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+  },
+  filterHeaderTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#111111',
+  },
+  filterResetText: {
+    fontSize: 16,
+    color: '#111111',
+    fontWeight: '500',
+  },
+  filterScroll: {
+    flex: 1,
+  },
+  filterScrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+  },
+  filterSearchBox: {
+    borderWidth: 1,
+    borderColor: '#DFDEDE',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  filterSearchPlaceholder: {
+    flex: 1,
+    marginHorizontal: 10,
+    color: '#CAC9C9',
+    fontSize: 14,
+  },
+  filterRouteCard: {
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+    borderRadius: 8,
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  filterRoutePathColumn: {
+    width: 16,
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  filterRouteDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: '#FFFFFF',
+    marginTop: 6,
+  },
+  filterRouteDashedLine: {
+    width: 1,
+    height: 34,
+    borderStyle: 'dashed',
+    borderLeftWidth: 1,
+    borderColor: '#232323',
+    marginVertical: 4,
+  },
+  filterRoutePin: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    marginBottom: 6,
+  },
+  filterRouteTextColumn: {
+    flex: 1,
+  },
+  filterRouteRowTop: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#EBEBEB',
+    paddingVertical: 14,
+  },
+  filterRouteRowBottom: {
+    paddingVertical: 14,
+  },
+  filterRouteText: {
+    color: '#111111',
+    fontSize: 14,
+  },
+  filterOptionCard: {
+    borderWidth: 1,
+    borderColor: '#D6D6D6',
+    borderRadius: 8,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterOptionCardActive: {
+    borderColor: '#D2F2FF',
+  },
+  filterOptionLeftIconWrap: {
+    width: 39,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: '#EDFAFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  filterOptionLeftIconWrapActive: {
+    width: 39,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: '#D2F2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  filterOptionIconText: {
+    fontSize: 20,
+    color: '#1B95C7',
+  },
+  filterOptionTextWrap: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  filterOptionTitle: {
+    color: '#111111',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  filterOptionSubtitle: {
+    marginTop: 2,
+    color: '#111111',
+    fontSize: 14,
+  },
+  filterDistanceHeader: {
+    marginTop: 16,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  filterDistanceTitle: {
+    color: '#111111',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  filterDistanceValue: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  filterDistanceCard: {
+    borderWidth: 1,
+    borderColor: '#D6D6D6',
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+  },
+  filterDistanceTrackBackground: {
+    height: 6,
+    borderRadius: 8,
+    backgroundColor: '#D2F2FF',
+    overflow: 'hidden',
+  },
+  filterDistanceTrackProgress: {
+    height: '100%',
+    borderRadius: 8,
+    backgroundColor: '#0795D0',
+    minWidth: 0,
+  },
+  filterDistancePresetRow: {
+    marginTop: -16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 0,
+  },
+  filterDistancePresetBtn: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterDistancePresetDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#B4E5F8',
+    borderWidth: 1,
+    borderColor: '#9CD7F1',
+  },
+  filterDistancePresetDotActive: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#0795D0',
+    borderColor: '#0795D0',
+  },
+  filterDistanceLabelsRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  filterDistanceLabel: {
+    color: '#111111',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  filterDistanceEnergyLabel: {
+    color: '#126C92',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterFacilitiesTitle: {
+    marginTop: 16,
+    marginBottom: 10,
+    color: '#111111',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  filterFacilitiesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  filterFacilityChip: {
+    borderWidth: 1,
+    borderColor: '#DFDEDE',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  filterFacilityChipActive: {
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+  },
+  filterFacilityChipText: {
+    color: '#292526',
+    fontSize: 14,
+  },
+  filterFacilityChipTextActive: {
+    color: '#FDFDFD',
+  },
+  filterDoneBtn: {
+    marginTop: 20,
+    backgroundColor: '#0F172A',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterDoneBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

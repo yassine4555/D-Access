@@ -36,6 +36,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test
+        run: npm test -- --runInBand
+
       - name: Build
         run: npm run build
 
@@ -63,6 +66,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Test
+        run: npm run test:ci
 
       - name: Build
         run: npm run build

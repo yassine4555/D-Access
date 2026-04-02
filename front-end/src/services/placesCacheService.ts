@@ -15,6 +15,9 @@ type NearbyPlacesKeyInput = {
   radiusMeters: number;
   limit: number;
   category?: string;
+  wheelchair?: 'yes' | 'no' | 'limited' | 'unknown';
+  toiletsWheelchair?: 'yes' | 'no' | 'unknown';
+  wheelchairKnown?: boolean;
 };
 
 const nearbyPlacesCache = new Map<string, CacheEntry<unknown>>();
@@ -51,6 +54,9 @@ export function createNearbyPlacesCacheKey({
   radiusMeters,
   limit,
   category,
+  wheelchair,
+  toiletsWheelchair,
+  wheelchairKnown,
 }: NearbyPlacesKeyInput): string {
   return [
     roundRegionValue(region.latitude),
@@ -58,6 +64,9 @@ export function createNearbyPlacesCacheKey({
     radiusMeters,
     limit,
     category ?? 'all',
+    wheelchair ?? 'any',
+    toiletsWheelchair ?? 'any',
+    wheelchairKnown ? 'known' : 'all-wheelchair',
   ].join('|');
 }
 

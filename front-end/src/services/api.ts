@@ -6,7 +6,7 @@ import {
     authTokenPayloadSchema,
     authUserSchema,
 } from '../schemas/authSchemas';
-import { nearbyPlacesResponseSchema } from '../schemas/placeSchemas';
+import { nearbyPlacesResponseSchema, placeDetailsSchema } from '../schemas/placeSchemas';
 
 const BASE_URL = getApiBaseUrl();
 const BASE_URL_CANDIDATES = getApiBaseUrlCandidates();
@@ -111,6 +111,11 @@ export const placesApi = {
         page: number = 1,
         limit: number = 20,
         category?: string,
+        filters?: {
+            wheelchair?: 'yes' | 'no' | 'limited' | 'unknown';
+            toiletsWheelchair?: 'yes' | 'no' | 'unknown';
+            wheelchairKnown?: boolean;
+        },
     ) => {
         const params = new URLSearchParams({
             lat: String(lat),
@@ -122,6 +127,18 @@ export const placesApi = {
 
         if (category) {
             params.append('category', category);
+        }
+
+        if (filters?.wheelchair) {
+            params.append('wheelchair', filters.wheelchair);
+        }
+
+        if (filters?.toiletsWheelchair) {
+            params.append('toiletsWheelchair', filters.toiletsWheelchair);
+        }
+
+        if (filters?.wheelchairKnown) {
+            params.append('wheelchairKnown', 'true');
         }
 
         const path = `/places/nearby?${params.toString()}`;
@@ -147,6 +164,35 @@ export const placesApi = {
                 }
 
                 console.warn('[placesApi.findNearby] Network error, retrying with next base URL:', baseURL);
+            }
+        }
+
+        throw lastError;
+    },
+    getById: async (sourceId: string) => {
+        const path = `/places/${encodeURIComponent(sourceId)}`;
+        let lastError: unknown;
+
+        for (const baseURL of BASE_URL_CANDIDATES) {
+            try {
+                const response = await api.get(path, { baseURL });
+
+                const parsed = placeDetailsSchema.safeParse(response.data);
+                if (!parsed.success) {
+                    console.error('[placesApi.getById] Invalid response payload:', parsed.error.flatten());
+                    throw new Error('Invalid place details response from server');
+                }
+
+                response.data = parsed.data;
+                return response;
+            } catch (error) {
+                lastError = error;
+
+                if (isAxiosError(error) && error.response) {
+                    throw error;
+                }
+
+                console.warn('[placesApi.getById] Network error, retrying with next base URL:', baseURL);
             }
         }
 

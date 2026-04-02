@@ -7,18 +7,15 @@ import {
     ScrollView,
     StatusBar,
     TextInput,
-    Image,
-    Dimensions,
 } from 'react-native';
-import { colors } from '../../constants/colors';
-import { shared, RADIUS, FONT, SPACING } from '../../constants/sharedStyles';
+import { shared } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { EditProfileEditIcon } from '../../components/icons/EditProfileEditIcon';
+import { EditProfileUserIcon } from '../../components/icons/EditProfileUserIcon';
 import { SettingsScreenProps } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { AuthRequiredPopup } from '../../components/common/AuthRequiredPopup';
 import { pushLoginOnRoot } from '../../navigation/navigationRef';
-
-const { width } = Dimensions.get('window');
 
 export default function EditProfileScreen({ navigation }: SettingsScreenProps<'EditProfile'>) {
     const { isAuthenticated } = useAuth();
@@ -61,30 +58,29 @@ export default function EditProfileScreen({ navigation }: SettingsScreenProps<'E
     }
 
     return (
-        <View style={shared.container}>
-            <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+        <View style={[shared.container, styles.screenContainer]}>
+            <StatusBar barStyle="dark-content" backgroundColor="#F4F4F4" />
 
-            {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.floatingButton, { position: 'absolute', top: 5, left: 16, zIndex: 10 }]}>
-                                <BackIcon color={colors.gray900} />
-               </TouchableOpacity>
-                <Text style={styles.headerTitle}>Personal Details</Text>
-                <View style={{ width: 44 }} />
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <BackIcon color="#111111" />
+                </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                {/* Profile Picture */}
+                <Text style={styles.headerTitle}>Personal Details</Text>
+
                 <View style={styles.avatarSection}>
-                    <View style={styles.avatarCircle}>
-                        <Text style={{ fontSize: 40, color: colors.gray400 }}>👤</Text>
+                    <View style={styles.avatarWrap}>
+                        <View style={styles.avatarCircle}>
+                            <EditProfileUserIcon />
+                        </View>
+                        <TouchableOpacity style={styles.editAvatarBtn}>
+                            <EditProfileEditIcon />
+                        </TouchableOpacity>
                     </View>
-                    <TouchableOpacity style={styles.editAvatarBtn}>
-                        <Text style={styles.editAvatarIcon}>✎</Text>
-                    </TouchableOpacity>
                 </View>
 
-                {/* Form */}
                 <View style={styles.form}>
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>First name</Text>
@@ -112,7 +108,7 @@ export default function EditProfileScreen({ navigation }: SettingsScreenProps<'E
                                 <Text style={styles.dropdownArrow}>▼</Text>
                             </TouchableOpacity>
                             <TextInput
-                                style={[styles.input, { flex: 1, marginLeft: 12 }]}
+                                style={styles.phoneInput}
                                 value={phone}
                                 onChangeText={setPhone}
                                 keyboardType="phone-pad"
@@ -187,146 +183,156 @@ export default function EditProfileScreen({ navigation }: SettingsScreenProps<'E
 }
 
 const styles = StyleSheet.create({
+    screenContainer: {
+        backgroundColor: '#F4F4F4',
+    },
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: 54,
-        paddingBottom: 16,
-        paddingHorizontal: 16,
+        paddingTop: 52,
+        paddingHorizontal: 24,
+        paddingBottom: 10,
     },
     backButton: {
-        width: 44,
-        height: 44,
-        alignItems: 'center',
+        width: 32,
+        height: 32,
         justifyContent: 'center',
     },
-    backIcon: {
-        fontSize: 32,
-        color: colors.gray900,
-        fontWeight: '300',
-    },
     headerTitle: {
-        fontSize: FONT.title,
-        fontWeight: '800',
-        color: colors.gray900,
+        color: '#101828',
+        fontSize: 30,
+        lineHeight: 42,
+        fontWeight: '700',
+        marginBottom: 14,
     },
-    floatingButton: {
-  backgroundColor: '#fff',       // make sure button has background
-  padding: 10,
-  borderRadius: 25,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 3,
-  elevation: 5,                  // for Android
-},
     scrollContent: {
-        paddingTop: SPACING.md,
+        paddingHorizontal: 33,
+        paddingBottom: 36,
     },
     avatarSection: {
         alignItems: 'center',
-        marginTop: 20,
-        marginBottom: 30,
+        marginTop: 0,
+        marginBottom: 16,
+    },
+    avatarWrap: {
+        width: 120,
+        height: 120,
         position: 'relative',
     },
     avatarCircle: {
         width: 120,
         height: 120,
         borderRadius: 60,
-        backgroundColor: colors.gray100,
+        backgroundColor: '#D9D9D9',
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: colors.gray200,
     },
     editAvatarBtn: {
         position: 'absolute',
-        bottom: 0,
-        right: (width / 2) - 60,
+        right: -8,
+        bottom: 8,
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: colors.white,
+        backgroundColor: '#FFFFFF',
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 1,
-        borderColor: colors.gray200,
+        borderColor: '#E9EAEC',
         shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 5,
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
         elevation: 3,
     },
-    editAvatarIcon: {
-        fontSize: 18,
-        color: '#4EAFD0',
-    },
     form: {
-        paddingHorizontal: 24,
+        paddingHorizontal: 0,
     },
     inputGroup: {
-        marginBottom: 20,
+        marginBottom: 12,
     },
     label: {
         fontSize: 14,
-        fontWeight: '600',
-        color: colors.gray700,
-        marginBottom: 8,
+        lineHeight: 20,
+        fontWeight: '400',
+        color: 'rgba(0,0,0,0.8)',
+        marginBottom: 2,
     },
     input: {
-        backgroundColor: colors.white,
+        backgroundColor: '#F4F4F4',
         borderWidth: 1,
-        borderColor: colors.gray200,
-        borderRadius: RADIUS.lg,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        fontSize: 16,
-        color: colors.gray900,
+        borderColor: '#DFDEDE',
+        borderRadius: 10,
+        height: 52,
+        paddingHorizontal: 15,
+        fontSize: 14,
+        lineHeight: 20,
+        fontWeight: '400',
+        color: '#292526',
     },
     phoneInputRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 8,
     },
     countryPicker: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.white,
+        backgroundColor: '#F4F4F4',
         borderWidth: 1,
-        borderColor: colors.gray200,
-        borderRadius: RADIUS.lg,
-        paddingVertical: 12,
-        paddingHorizontal: 12,
+        borderColor: '#DFDEDE',
+        borderRadius: 10,
+        height: 52,
+        width: 85,
+        justifyContent: 'space-between',
+        paddingHorizontal: 10,
     },
     countryText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: colors.gray900,
-        marginRight: 4,
+        fontSize: 14,
+        lineHeight: 20,
+        fontWeight: '400',
+        color: '#292526',
+        marginRight: 0,
     },
     dropdownArrow: {
-        fontSize: 10,
-        color: colors.gray600,
+        fontSize: 12,
+        color: '#292526',
+        marginTop: 1,
+    },
+    phoneInput: {
+        flex: 1,
+        backgroundColor: '#F4F4F4',
+        borderWidth: 1,
+        borderColor: '#DFDEDE',
+        borderRadius: 10,
+        height: 52,
+        paddingHorizontal: 15,
+        fontSize: 14,
+        lineHeight: 20,
+        fontWeight: '400',
+        color: '#292526',
     },
     changePasswordRow: {
         alignSelf: 'flex-end',
-        marginVertical: 8,
+        marginTop: -2,
+        marginBottom: 12,
     },
     changePasswordText: {
-        color: '#4EAFD0',
+        color: '#25A8DF',
         fontSize: 14,
-        fontWeight: '600',
+        lineHeight: 20,
+        fontWeight: '400',
         textDecorationLine: 'underline',
     },
     saveBtn: {
-        backgroundColor: colors.gray100,
-        paddingVertical: 16,
-        borderRadius: RADIUS.lg,
+        backgroundColor: '#E6E5EA',
+        height: 45,
+        borderRadius: 10,
         alignItems: 'center',
-        marginTop: 20,
+        justifyContent: 'center',
+        marginTop: 4,
     },
     saveBtnText: {
-        color: colors.gray400,
-        fontWeight: '700',
+        color: '#C7C5CD',
+        fontWeight: '500',
         fontSize: 16,
+        lineHeight: 22,
     },
 });

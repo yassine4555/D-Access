@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Image, StyleSheet, StatusBar, Dimensions 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RootScreenProps } from '../../types/navigation';
+import { useAuth } from '../../context/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HORIZONTAL_MARGIN = 35;
@@ -11,6 +12,13 @@ const ILLUSTRATION_WIDTH = Math.min(SCREEN_WIDTH * 1.09, 437);
 const ILLUSTRATION_HEIGHT = ILLUSTRATION_WIDTH * 0.96;
 
 export default function WelcomeScreen({ navigation }: RootScreenProps<'Welcome'>) {
+    const { setGuestEntry } = useAuth();
+  
+    const handleGetStarted = () => {
+      setGuestEntry(true);
+      navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+    };
+
   return (
     <LinearGradient
       colors={['#0FA3E2', '#49C9FF']}
@@ -53,7 +61,7 @@ export default function WelcomeScreen({ navigation }: RootScreenProps<'Welcome'>
           <View style={[styles.buttonsContainer, { width: CONTENT_WIDTH }]}>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] })}
+              onPress={handleGetStarted}
               activeOpacity={0.8}
             >
               <Text style={styles.primaryButtonText}>Get Started</Text>

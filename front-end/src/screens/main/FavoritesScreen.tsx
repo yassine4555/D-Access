@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -6,32 +6,60 @@ import {
     TouchableOpacity,
     StyleSheet,
     StatusBar,
-    Dimensions,
+    Image,
 } from 'react-native';
 import { colors } from '../../constants/colors';
-import { shared, SPACING, RADIUS, FONT, SEMANTIC_COLORS } from '../../constants/sharedStyles';
+import { shared } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { FavoritesLocationIcon } from '../../components/icons/FavoritesLocationIcon';
+import { FavoritesDocumentIcon } from '../../components/icons/FavoritesDocumentIcon';
+import { FavoritesPencilIcon } from '../../components/icons/FavoritesPencilIcon';
+import { FavoritesTrashBinIcon } from '../../components/icons/FavoritesTrashBinIcon';
+import { FavoritesStarIcon } from '../../components/icons/FavoritesStarIcon';
 import { SettingsScreenProps } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { AuthRequiredPopup } from '../../components/common/AuthRequiredPopup';
 import { pushLoginOnRoot } from '../../navigation/navigationRef';
 
-const { width } = Dimensions.get('window');
+type Place = { id: string; name: string; address: string };
+type Article = { id: string; title: string; author: string; imageUrl: string };
 
-const FREQUENT_SPOTS = [
+const FREQUENT_SPOTS: Place[] = [
     { id: '1', name: 'Home', address: '123 Oak Street, Montreal' },
     { id: '2', name: 'Work', address: '123 Oak Street, Montreal' },
     { id: '3', name: 'Favorite Cafe', address: '123 Oak Street, Montreal' },
 ];
 
-const SAVED_FOR_LATER = [
+const SAVED_FOR_LATER: Place[] = [
     { id: '4', name: 'Favorite Cafe', address: '123 Oak Street, Montreal' },
     { id: '5', name: 'Favorite Cafe', address: '123 Oak Street, Montreal' },
 ];
 
+const FAVORITE_ARTICLES: Article[] = [
+    {
+        id: 'a1',
+        title: 'Essential guide to wheelchair Trip to Rio de Janeiro',
+        author: 'By Mary k.',
+        imageUrl: 'https://images.unsplash.com/photo-1597262975002-c5c3b14bbd62?auto=format&fit=crop&w=200&q=80',
+    },
+    {
+        id: 'a2',
+        title: 'Essential guide to wheelchair Trip to Rio de Janeiro',
+        author: 'By Mary k.',
+        imageUrl: 'https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=200&q=80',
+    },
+];
+
+type FavoritesTab = 'Places' | 'Articles';
+
 export default function FavoritesScreen({ navigation }: SettingsScreenProps<'Favorites'>) {
     const { isAuthenticated } = useAuth();
-    const [activeTab, setActiveTab] = useState('Places');
+    const [activeTab, setActiveTab] = useState<FavoritesTab>('Places');
+
+    const noFavorites = useMemo(
+        () => FREQUENT_SPOTS.length === 0 && SAVED_FOR_LATER.length === 0 && FAVORITE_ARTICLES.length === 0,
+        [],
+    );
 
     const handleContinueAsGuest = () => {
         if (navigation.canGoBack()) {
@@ -63,85 +91,116 @@ export default function FavoritesScreen({ navigation }: SettingsScreenProps<'Fav
     }
 
     return (
-        <View style={shared.container}>
-            <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+        <View style={[shared.container, styles.screen]}>
+            <StatusBar barStyle="dark-content" backgroundColor="#F4F4F4" />
 
-            {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.floatingButton, { position: 'absolute', top: 45, left: 16, zIndex: 10 }]}>
-                                                                                  <BackIcon color={colors.gray900} />
-                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, {position: 'absolute', top: 45, right: 16}]}>My Favorites</Text>
-                <View style={{ width: 44 }} />
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <BackIcon color={colors.gray900} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>My Favorites</Text>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Tabs */}
-                <View style={styles.tabsContainer}>
-                    <TouchableOpacity
-                        style={[styles.tab, activeTab === 'Places' && styles.tabActive]}
-                        onPress={() => setActiveTab('Places')}
-                    >
-                        <Text style={[styles.tabIcon, activeTab === 'Places' && styles.tabTextActive]}>📍</Text>
-                        <Text style={[styles.tabText, activeTab === 'Places' && styles.tabTextActive]}>Places</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.tab, activeTab === 'Articles' && styles.tabActive]}
-                        onPress={() => setActiveTab('Articles')}
-                    >
-                        <Text style={[styles.tabIcon, activeTab === 'Articles' && styles.tabTextActive]}>📄</Text>
-                        <Text style={[styles.tabText, activeTab === 'Articles' && styles.tabTextActive]}>Articles</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Frequent Spots */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>My Frequent Spots</Text>
-                </View>
-
-                {FREQUENT_SPOTS.map((spot) => (
-                    <View key={spot.id} style={styles.spotCard}>
-                        <View style={styles.cardHeader}>
-                            <View>
-                                <Text style={styles.spotName}>{spot.name}</Text>
-                                <Text style={styles.spotAddress}>{spot.address}</Text>
-                            </View>
-                            <TouchableOpacity>
-                                <Text style={styles.editIcon}>✎</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <TouchableOpacity style={styles.directionsBtn}>
-                            <Text style={styles.directionsBtnText}>Directions</Text>
-                            <Text style={styles.chevronIcon}>›</Text>
+                {!noFavorites && (
+                    <View style={styles.tabsContainer}>
+                        <TouchableOpacity
+                            style={[styles.tab, activeTab === 'Places' && styles.tabActive]}
+                            onPress={() => setActiveTab('Places')}
+                            activeOpacity={0.9}
+                        >
+                            <FavoritesLocationIcon color={activeTab === 'Places' ? '#FFFFFF' : '#292526'} />
+                            <Text style={[styles.tabText, activeTab === 'Places' && styles.tabTextActive]}>Places</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.tab, activeTab === 'Articles' && styles.tabActive]}
+                            onPress={() => setActiveTab('Articles')}
+                            activeOpacity={0.9}
+                        >
+                            <FavoritesDocumentIcon color={activeTab === 'Articles' ? '#FFFFFF' : '#292526'} />
+                            <Text style={[styles.tabText, activeTab === 'Articles' && styles.tabTextActive]}>Articles</Text>
                         </TouchableOpacity>
                     </View>
-                ))}
+                )}
 
-                <View style={styles.divider} />
-
-                {/* Saved For Later */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Saved For Later</Text>
-                </View>
-
-                {SAVED_FOR_LATER.map((spot) => (
-                    <View key={spot.id} style={styles.spotCard}>
-                        <View>
-                            <Text style={styles.spotName}>{spot.name}</Text>
-                            <Text style={styles.spotAddress}>{spot.address}</Text>
+                {!noFavorites && activeTab === 'Places' && (
+                    <>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>My Frequent Spots</Text>
                         </View>
-                        <View style={styles.dualButtons}>
-                            <TouchableOpacity style={styles.removeBtn}>
-                                <Text style={styles.removeIcon}>🗑</Text>
-                                <Text style={styles.removeBtnText}>Remove</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.smallDirectionsBtn}>
-                                <Text style={styles.smallDirectionsBtnText}>Directions</Text>
-                                <Text style={styles.chevronIconSmall}>›</Text>
-                            </TouchableOpacity>
+
+                        {FREQUENT_SPOTS.map((spot) => (
+                            <View key={spot.id} style={styles.placeCard}>
+                                <View style={styles.cardHeader}>
+                                    <View>
+                                        <Text style={styles.spotName}>{spot.name}</Text>
+                                        <Text style={styles.spotAddress}>{spot.address}</Text>
+                                    </View>
+                                    <TouchableOpacity activeOpacity={0.8}>
+                                        <FavoritesPencilIcon />
+                                    </TouchableOpacity>
+                                </View>
+                                <TouchableOpacity style={styles.directionsBtn} activeOpacity={0.9}>
+                                    <Text style={styles.directionsBtnText}>Directions</Text>
+                                    <Text style={styles.chevronIcon}>›</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ))}
+
+                        <View style={styles.divider} />
+
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Saved For Later</Text>
                         </View>
+
+                        {SAVED_FOR_LATER.map((spot) => (
+                            <View key={spot.id} style={styles.placeCard}>
+                                <View>
+                                    <Text style={styles.spotName}>{spot.name}</Text>
+                                    <Text style={styles.spotAddress}>{spot.address}</Text>
+                                </View>
+                                <View style={styles.dualButtons}>
+                                    <TouchableOpacity style={styles.removeBtn} activeOpacity={0.9}>
+                                        <FavoritesTrashBinIcon />
+                                        <Text style={styles.removeBtnText}>Directions</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.smallDirectionsBtn} activeOpacity={0.9}>
+                                        <Text style={styles.smallDirectionsBtnText}>Directions</Text>
+                                        <Text style={styles.chevronIconSmall}>›</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ))}
+                    </>
+                )}
+
+                {!noFavorites && activeTab === 'Articles' && (
+                    <View style={styles.articlesWrap}>
+                        {FAVORITE_ARTICLES.map((article) => (
+                            <View key={article.id} style={styles.articleCard}>
+                                <View style={styles.articleHeader}>
+                                    <Image source={{ uri: article.imageUrl }} style={styles.articleImage} />
+                                    <View style={styles.articleTextWrap}>
+                                        <Text style={styles.articleTitle}>{article.title}</Text>
+                                        <Text style={styles.articleAuthor}>{article.author}</Text>
+                                    </View>
+                                </View>
+                                <TouchableOpacity style={styles.articleRemoveBtn} activeOpacity={0.9}>
+                                    <FavoritesTrashBinIcon />
+                                    <Text style={styles.articleRemoveText}>Directions</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ))}
                     </View>
-                ))}
+                )}
+
+                {noFavorites && (
+                    <View style={styles.emptyContainer}>
+                        <FavoritesStarIcon />
+                        <Text style={styles.emptyTitle}>No Favorites Yet</Text>
+                        <Text style={styles.emptyHint}>Save places and articles to see them here.</Text>
+                    </View>
+                )}
 
                 <View style={shared.bottomSpacer} />
             </ScrollView>
@@ -150,180 +209,242 @@ export default function FavoritesScreen({ navigation }: SettingsScreenProps<'Fav
 }
 
 const styles = StyleSheet.create({
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: 54,
-        paddingBottom: 16,
-        paddingHorizontal: 16,
+    screen: {
+        backgroundColor: '#F4F4F4',
     },
-    backButton: {
-        width: 44,
-        height: 44,
+    header: {
+        paddingTop: 52,
+        paddingHorizontal: 20,
+        paddingBottom: 16,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    backIcon: {
-        fontSize: 32,
-        color: colors.gray900,
-        fontWeight: '300',
+    backButton: {
+        position: 'absolute',
+        left: 16,
+        top: 50,
+        width: 32,
+        height: 32,
+        justifyContent: 'center',
     },
     headerTitle: {
-        fontSize: FONT.title,
-        fontWeight: '800',
-        color: colors.gray900,
+        fontSize: 18,
+        lineHeight: 25,
+        fontWeight: '700',
+        color: '#000000',
     },
-    floatingButton: {
-  backgroundColor: '#fff',       // make sure button has background
-  padding: 10,
-  borderRadius: 25,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 3,
-  elevation: 5,                  // for Android
-},
     tabsContainer: {
         flexDirection: 'row',
-        paddingHorizontal: 16,
-        marginBottom: 24,
-        gap: 12,
+        paddingHorizontal: 20,
+        marginBottom: 20,
+        gap: 10,
     },
     tab: {
         flex: 1,
+        height: 45,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#DFDEDE',
+        backgroundColor: '#FDFDFD',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 12,
-        borderRadius: RADIUS.lg,
-        borderWidth: 1,
-        borderColor: colors.gray200,
-        backgroundColor: colors.white,
+        gap: 6,
     },
     tabActive: {
-        backgroundColor: SEMANTIC_COLORS.dark,
-        borderColor: SEMANTIC_COLORS.dark,
-    },
-    tabIcon: {
-        fontSize: 18,
-        marginRight: 8,
+        backgroundColor: '#0F172A',
+        borderColor: '#0F172A',
     },
     tabText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: colors.gray700,
+        fontSize: 18,
+        lineHeight: 25,
+        fontWeight: '400',
+        color: '#292526',
     },
     tabTextActive: {
-        color: colors.white,
+        color: '#FDFDFD',
     },
     sectionHeader: {
-        paddingHorizontal: 16,
-        marginBottom: 16,
+        paddingHorizontal: 20,
+        marginBottom: 10,
     },
     sectionTitle: {
         fontSize: 18,
-        fontWeight: '800',
-        color: colors.gray900,
+        lineHeight: 25,
+        fontWeight: '600',
+        color: '#000000',
     },
-    spotCard: {
-        backgroundColor: colors.white,
-        borderRadius: RADIUS.xl,
-        marginHorizontal: 16,
-        marginBottom: 16,
-        padding: 16,
+    placeCard: {
+        marginHorizontal: 20,
+        marginBottom: 10,
+        borderRadius: 8,
         borderWidth: 1,
-        borderColor: colors.gray100,
-        shadowColor: '#000',
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 2,
+        borderColor: '#DFDEDE',
+        backgroundColor: '#F4F4F4',
+        paddingHorizontal: 18,
+        paddingTop: 14,
+        paddingBottom: 14,
     },
     cardHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: 16,
+        justifyContent: 'space-between',
+        marginBottom: 12,
     },
     spotName: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: colors.gray900,
-        marginBottom: 4,
+        fontSize: 18,
+        lineHeight: 25,
+        fontWeight: '600',
+        color: '#333333',
     },
     spotAddress: {
         fontSize: 14,
-        color: colors.gray500,
-    },
-    editIcon: {
-        fontSize: 18,
-        color: '#4EAFD0',
+        lineHeight: 20,
+        fontWeight: '500',
+        color: '#333333',
     },
     directionsBtn: {
+        height: 44,
+        borderRadius: 10,
+        backgroundColor: '#4AAFD9',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#4EAFD0',
-        paddingVertical: 12,
-        borderRadius: RADIUS.lg,
+        gap: 8,
     },
     directionsBtnText: {
-        color: colors.white,
+        color: '#F4F3F5',
+        fontSize: 12,
+        lineHeight: 17,
         fontWeight: '600',
-        fontSize: 16,
-        marginRight: 6,
     },
     chevronIcon: {
-        color: colors.white,
-        fontSize: 20,
+        color: '#F4F3F5',
+        fontSize: 24,
+        lineHeight: 24,
+        marginTop: -1,
     },
     divider: {
         height: 1,
-        backgroundColor: colors.gray100,
-        marginHorizontal: 16,
-        marginVertical: 24,
+        backgroundColor: '#DFDEDE',
+        marginHorizontal: 20,
+        marginVertical: 18,
     },
     dualButtons: {
         flexDirection: 'row',
+        gap: 10,
         marginTop: 16,
-        gap: 12,
     },
     removeBtn: {
-        flex: 1,
+        width: 150,
+        height: 44,
+        borderRadius: 10,
+        backgroundColor: '#FEF2F2',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FEF2F2',
-        paddingVertical: 12,
-        borderRadius: RADIUS.lg,
-    },
-    removeIcon: {
-        fontSize: 16,
-        color: '#EF4444',
-        marginRight: 6,
+        gap: 8,
     },
     removeBtnText: {
-        color: '#EF4444',
-        fontWeight: '600',
-        fontSize: 14,
+        color: '#DC2626',
+        fontSize: 12,
+        lineHeight: 16,
+        fontWeight: '500',
     },
     smallDirectionsBtn: {
-        flex: 1.5,
+        flex: 1,
+        height: 44,
+        borderRadius: 10,
+        backgroundColor: '#4AAFD9',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#4EAFD0',
-        paddingVertical: 12,
-        borderRadius: RADIUS.lg,
+        gap: 8,
     },
     smallDirectionsBtnText: {
-        color: colors.white,
+        color: '#F4F3F5',
+        fontSize: 12,
+        lineHeight: 17,
         fontWeight: '600',
-        fontSize: 14,
-        marginRight: 4,
     },
     chevronIconSmall: {
-        color: colors.white,
+        color: '#F4F3F5',
+        fontSize: 24,
+        lineHeight: 24,
+    },
+    articlesWrap: {
+        paddingHorizontal: 20,
+    },
+    articleCard: {
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#DFDEDE',
+        backgroundColor: '#F4F4F4',
+        paddingHorizontal: 18,
+        paddingTop: 18,
+        paddingBottom: 20,
+        marginBottom: 20,
+    },
+    articleHeader: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 16,
+    },
+    articleImage: {
+        width: 50,
+        height: 50,
+        borderRadius: 8,
+        marginRight: 10,
+    },
+    articleTextWrap: {
+        flex: 1,
+    },
+    articleTitle: {
         fontSize: 18,
+        lineHeight: 25,
+        fontWeight: '600',
+        color: '#000000',
+        marginBottom: 8,
+    },
+    articleAuthor: {
+        fontSize: 14,
+        lineHeight: 20,
+        fontWeight: '500',
+        color: '#333333',
+    },
+    articleRemoveBtn: {
+        height: 44,
+        borderRadius: 10,
+        backgroundColor: '#FEF2F2',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    articleRemoveText: {
+        color: '#DC2626',
+        fontSize: 12,
+        lineHeight: 16,
+        fontWeight: '500',
+    },
+    emptyContainer: {
+        minHeight: 520,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 32,
+        gap: 10,
+    },
+    emptyTitle: {
+        fontSize: 22,
+        lineHeight: 30,
+        fontWeight: '700',
+        color: '#0F172A',
+    },
+    emptyHint: {
+        fontSize: 14,
+        lineHeight: 20,
+        fontWeight: '400',
+        color: '#6B7280',
+        textAlign: 'center',
     },
 });

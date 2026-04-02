@@ -6,66 +6,92 @@ import {
     TouchableOpacity,
     ScrollView,
     StatusBar,
-    Switch,
 } from 'react-native';
-import { colors } from '../../constants/colors';
-import { shared, RADIUS, FONT, SPACING } from '../../constants/sharedStyles';
+import { shared } from '../../constants/sharedStyles';
+import { AccessibilityDyslexicFontIcon } from '../../components/icons/AccessibilityDyslexicFontIcon';
+import { AccessibilityHideImagesIcon } from '../../components/icons/AccessibilityHideImagesIcon';
+import { AccessibilityLeftHandModeIcon } from '../../components/icons/AccessibilityLeftHandModeIcon';
+import { AccessibilityTextMagnifierIcon } from '../../components/icons/AccessibilityTextMagnifierIcon';
+import { AccessibilityTextSizeIcon } from '../../components/icons/AccessibilityTextSizeIcon';
 import { BackIcon } from '../../components/icons/BackIcon';
 import { SettingsScreenProps } from '../../types/navigation';
 
-const ACCESSIBILITY_OPTIONS = [
-    { id: 'LargeText', label: 'Large Text', description: 'Increase the font size for better readability.' },
-    { id: 'HighContrast', label: 'High Contrast', description: 'Enhance the contrast between text and background.' },
-    { id: 'ScreenReader', label: 'Screen Reader Support', description: 'Enable voice descriptions for UI elements.' },
-    { id: 'HapticFeedback', label: 'Haptic Feedback', description: 'Vibrate the device on interaction.' },
+type AccessibilitySettingId =
+    | 'BiggerText'
+    | 'HideImages'
+    | 'DyslexicFont'
+    | 'Magnifier'
+    | 'LeftHandMode';
+
+type AccessibilityOption = {
+    id: AccessibilitySettingId;
+    label: string;
+    dotsCount?: 2 | 3;
+    renderIcon: () => React.ReactNode;
+};
+
+const ACCESSIBILITY_OPTIONS: AccessibilityOption[] = [
+    { id: 'BiggerText', label: 'Bigger Text', dotsCount: 3, renderIcon: () => <AccessibilityTextSizeIcon /> },
+    { id: 'HideImages', label: 'Hide Images', renderIcon: () => <AccessibilityHideImagesIcon /> },
+    { id: 'DyslexicFont', label: 'Dyslexic Font', renderIcon: () => <AccessibilityDyslexicFontIcon /> },
+    { id: 'Magnifier', label: 'Magnifier', renderIcon: () => <AccessibilityTextMagnifierIcon /> },
+    { id: 'LeftHandMode', label: 'Left Hand Mode', dotsCount: 2, renderIcon: () => <AccessibilityLeftHandModeIcon /> },
 ];
 
 export default function AccessibilitySettingsScreen({ navigation }: SettingsScreenProps<'AccessibilitySettings'>) {
-    const [settings, setSettings] = useState<Record<string, boolean>>({
-        LargeText: false,
-        HighContrast: false,
-        ScreenReader: false,
-        HapticFeedback: true,
+    const [settings, setSettings] = useState<Record<AccessibilitySettingId, boolean>>({
+        BiggerText: false,
+        HideImages: false,
+        DyslexicFont: false,
+        Magnifier: false,
+        LeftHandMode: false,
     });
 
-    const toggleSwitch = (id: string) => {
+    const toggleSwitch = (id: AccessibilitySettingId) => {
         setSettings(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
     return (
-        <View style={shared.container}>
-            <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+        <View style={[shared.container, styles.screenContainer]}>
+            <StatusBar barStyle="dark-content" backgroundColor="#F4F4F4" />
 
-            {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.floatingButton, { position: 'absolute', top: 45, left: 16, zIndex: 10 }]}>
-                                      <BackIcon color={colors.gray900} />
-                         </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <BackIcon color="#111111" />
+                </TouchableOpacity>
                 <Text style={styles.headerTitle}>Accessibility</Text>
-                <View style={{ width: 44 }} />
+                <View style={styles.headerSpacer} />
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                <View style={styles.introSection}>
-                    <Text style={styles.introText}>
-                        Customize how you experience the app. We strive to make Dwee accessible to everyone.
-                    </Text>
-                </View>
+                <View style={styles.grid}>
+                    {ACCESSIBILITY_OPTIONS.map((option) => {
+                        const isEnabled = settings[option.id];
+                        return (
+                            <TouchableOpacity
+                                key={option.id}
+                                style={[styles.card, isEnabled && styles.cardActive]}
+                                activeOpacity={0.85}
+                                onPress={() => toggleSwitch(option.id)}
+                            >
+                                <View style={styles.cardContent}>
+                                    <View style={[styles.iconCircle, isEnabled && styles.iconCircleActive]}>
+                                        {option.renderIcon()}
+                                    </View>
+                                    <Text style={styles.cardLabel}>{option.label}</Text>
+                                </View>
 
-                {ACCESSIBILITY_OPTIONS.map((option) => (
-                    <View key={option.id} style={styles.optionRow}>
-                        <View style={styles.textContainer}>
-                            <Text style={styles.optionLabel}>{option.label}</Text>
-                            <Text style={styles.optionDescription}>{option.description}</Text>
-                        </View>
-                        <Switch
-                            value={settings[option.id]}
-                            onValueChange={() => toggleSwitch(option.id)}
-                            trackColor={{ false: colors.gray200, true: colors.primary }}
-                            thumbColor={colors.white}
-                        />
-                    </View>
-                ))}
+                                {!!option.dotsCount && (
+                                    <View style={styles.dotsColumn}>
+                                        {Array.from({ length: option.dotsCount }).map((_, index) => (
+                                            <View key={`${option.id}-dot-${index}`} style={styles.dot} />
+                                        ))}
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
 
                 <View style={shared.bottomSpacer} />
             </ScrollView>
@@ -74,74 +100,86 @@ export default function AccessibilitySettingsScreen({ navigation }: SettingsScre
 }
 
 const styles = StyleSheet.create({
+    screenContainer: {
+        backgroundColor: '#F4F4F4',
+    },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingTop: 54,
-        paddingBottom: 16,
-        paddingHorizontal: 16,
+        paddingTop: 52,
+        paddingHorizontal: 20,
+        paddingBottom: 14,
     },
     backButton: {
-        width: 44,
-        height: 44,
-        alignItems: 'center',
+        width: 32,
+        height: 32,
         justifyContent: 'center',
     },
-    backIcon: {
-        fontSize: 32,
-        color: colors.gray900,
-        fontWeight: '300',
+    headerSpacer: {
+        width: 32,
     },
-    floatingButton: {
-  backgroundColor: '#fff',       // make sure button has background
-  padding: 10,
-  borderRadius: 25,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 3,
-  elevation: 5,                  // for Android
-},
     headerTitle: {
-        fontSize: FONT.title,
-        fontWeight: '800',
-        color: colors.gray900,
+        fontSize: 30,
+        lineHeight: 35,
+        fontWeight: '700',
+        color: '#000000',
     },
     scrollContent: {
-        paddingTop: SPACING.md,
-    },
-    introSection: {
         paddingHorizontal: 20,
-        marginBottom: 24,
+        paddingBottom: 36,
     },
-    introText: {
-        fontSize: 15,
-        color: colors.gray500,
-        lineHeight: 22,
-    },
-    optionRow: {
+    grid: {
         flexDirection: 'row',
-        alignItems: 'center',
+        flexWrap: 'wrap',
         justifyContent: 'space-between',
-        paddingVertical: 18,
-        paddingHorizontal: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.gray100,
+        rowGap: 14,
     },
-    textContainer: {
-        flex: 1,
-        marginRight: 16,
+    card: {
+        width: '48%',
+        minHeight: 128,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#EDEFF5',
+        borderRadius: 16,
+        padding: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
     },
-    optionLabel: {
+    cardActive: {
+        borderColor: '#C7D5FF',
+        backgroundColor: '#F8FAFF',
+    },
+    cardContent: {
+        justifyContent: 'space-between',
+    },
+    iconCircle: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#F4F5F7',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
+    iconCircleActive: {
+        backgroundColor: '#E9EEFF',
+    },
+    cardLabel: {
         fontSize: 16,
-        fontWeight: '700',
-        color: colors.gray900,
-        marginBottom: 4,
+        lineHeight: 22,
+        fontWeight: '500',
+        color: '#111827',
     },
-    optionDescription: {
-        fontSize: 13,
-        color: colors.gray500,
-        lineHeight: 18,
+    dotsColumn: {
+        alignSelf: 'center',
+        gap: 8,
+        marginLeft: 8,
+    },
+    dot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#D9DEE8',
     },
 });

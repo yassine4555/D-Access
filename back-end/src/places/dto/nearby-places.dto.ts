@@ -1,6 +1,7 @@
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsInt,
   IsLatitude,
   IsLongitude,
@@ -65,4 +66,32 @@ export class NearbyPlacesDto {
   @IsOptional()
   @IsString()
   wheelchair?: 'yes' | 'no' | 'limited' | 'unknown';
+
+  @ApiPropertyOptional({
+    enum: ['yes', 'no', 'unknown'],
+    description: 'Filter by toilet accessibility',
+  })
+  @IsOptional()
+  @IsString()
+  toiletsWheelchair?: 'yes' | 'no' | 'unknown';
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'When true and wheelchair is not provided, return only records where wheelchair is not unknown',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined) {
+      return false;
+    }
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    const normalized = String(value).trim().toLowerCase();
+    return normalized === 'true' || normalized === '1';
+  })
+  @IsBoolean()
+  wheelchairKnown?: boolean;
 }

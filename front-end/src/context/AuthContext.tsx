@@ -40,6 +40,9 @@ interface AuthContextValue {
     loginWithApple:    () => Promise<void>;
     lastAuthAction: AuthActionType;
     clearLastAuthAction: () => void;
+    isGuestEntry: boolean;
+    clearGuestEntry: () => void;
+    setGuestEntry: (isGuest: boolean) => void;
 }
 
 // ── Context ──────────────────────────────────────────────────────────────────
@@ -91,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [token, setToken] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [lastAuthAction, setLastAuthAction] = useState<AuthActionType>(null);
+    const [isGuestEntry, setIsGuestEntry] = useState(false);
     const isHandlingDeepLinkRef = useRef(false);
     const lastHandledTokenRef = useRef<string | null>(null);
 
@@ -151,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await saveToken(jwt);
             setToken(jwt);
             console.log('[AuthContext] handleDeepLink() - Token saved, fetching user data...');
+            setIsGuestEntry(false);
             
             const res = await authApi.me(jwt);
             setUser(res.data);
@@ -191,8 +196,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await saveToken(access_token);
             setToken(access_token);
             setUser(u);
+            setIsGuestEntry(false);
             setLastAuthAction('login');
             console.log('[AuthContext] login() - Login successful, user:', u.email);
+            setIsGuestEntry(false);
         } catch (error: any) {
             console.error('[AuthContext] login() - Error:', {
                 message: error.message,
@@ -226,11 +233,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(null);
         setUser(null);
         setLastAuthAction(null);
+            setIsGuestEntry(false);
         lastHandledTokenRef.current = null;
     };
 
     const clearLastAuthAction = () => {
         setLastAuthAction(null);
+    };
+    const clearGuestEntry = () => {
+        setIsGuestEntry(false);
+    };
+    const setGuestEntry = (isGuest: boolean) => {
+        setIsGuestEntry(isGuest);
     };
 
     // ── Social login helpers ─────────────────────────────────────────────────
@@ -240,11 +254,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const redirect = getSocialAuthRedirectUri();
             // Pass redirect URI to backend so it knows where to send the user back
             const authUrl  = `${baseUrl}/auth/${provider}?redirect=${encodeURIComponent(redirect)}`;
-
             console.log(`[AuthContext] socialLogin(${provider}) - Opening OAuth session`);
             console.log(`[AuthContext] Auth URL: ${authUrl}`);
             console.log(`[AuthContext] Redirect URI: ${redirect}`);
-
             const result = await WebBrowser.openAuthSessionAsync(authUrl, redirect);
             console.log(`[AuthContext] socialLogin(${provider}) - Result type:`, result.type);
 
@@ -292,6 +304,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 loginWithApple,
                 lastAuthAction,
                 clearLastAuthAction,
+                isGuestEntry,
+                clearGuestEntry,
+                setGuestEntry,
             }}
         >
             {children}

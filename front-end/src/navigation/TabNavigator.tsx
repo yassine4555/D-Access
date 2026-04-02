@@ -11,7 +11,7 @@ import PublicPlaceDetailsScreen from '../screens/main/PublicPlaceDetailsScreen';
 import AddReportScreen from '../screens/main/AddReportScreen';
 import ReportDetailsScreen from '../screens/main/ReportDetailsScreen';
 import WriteReviewScreen from '../screens/main/WriteReviewScreen';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, BackHandler, Platform } from 'react-native';
 import { colors } from '../constants/colors';
 
 import FavoritesScreen from '../screens/main/FavoritesScreen';
@@ -27,6 +27,8 @@ import { SvgProps } from 'react-native-svg/lib/typescript/elements/Svg';
 import { HomeStackParamList, MapStackParamList, SettingsStackParamList, TabParamList } from '../types/navigation';
 import { useAuth } from '../context/AuthContext';
 import { AuthStatusPopup } from '../components/common/AuthStatusPopup';
+import { ExitAppPopup } from '../components/common/ExitAppPopup';
+import { navigationRef } from './navigationRef';
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
@@ -105,16 +107,65 @@ function SettingsStackScreen() {
 }
 
 export default function TabNavigator() {
-    const { lastAuthAction, clearLastAuthAction } = useAuth();
+    const { lastAuthAction, clearLastAuthAction, isGuestEntry, clearGuestEntry } = useAuth();
     const [showSuccessPopup, setShowSuccessPopup] = useState(false);
     const [showLocationPopup, setShowLocationPopup] = useState(false);
+    const [showExitPopup, setShowExitPopup] = useState(false);
 
     useEffect(() => {
         if (!lastAuthAction) return;
         setShowSuccessPopup(true);
     }, [lastAuthAction]);
 
+    useEffect(() => {
+        if (!isGuestEntry) return;
+        setShowSuccessPopup(true);
+    }, [isGuestEntry]);
+
+    useEffect(() => {
+        if (Platform.OS !== 'android') {
+            return;
+        }
+
+        const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (showExitPopup) {
+                setShowExitPopup(false);
+                return true;
+            }
+
+            if (showLocationPopup) {
+                setShowLocationPopup(false);
+                return true;
+            }
+
+            if (showSuccessPopup) {
+                setShowSuccessPopup(false);
+                return true;
+            }
+
+            if (!navigationRef.isReady()) {
+                return false;
+            }
+
+            if (navigationRef.canGoBack()) {
+                return false;
+            }
+
+            setShowExitPopup(true);
+            return true;
+        });
+
+        return () => subscription.remove();
+    }, [showExitPopup, showLocationPopup, showSuccessPopup]);
+
     const successContent = useMemo(() => {
+        if (isGuestEntry) {
+            return {
+                title: 'Welcome to D-WEE',
+                message: 'Explore accessible places in your area and find what you need with ease.',
+                primaryLabel: 'Let\'s Start',
+            };
+        }
         if (lastAuthAction === 'register') {
             return {
                 title: 'Welcome to D-WEE',
@@ -128,7 +179,7 @@ export default function TabNavigator() {
             message: 'Welcome back! Your saved "Favorites" and accessibility settings are loaded.',
             primaryLabel: 'Go to Dashboard',
         };
-    }, [lastAuthAction]);
+    }, [lastAuthAction, isGuestEntry]);
 
     const openLocationPopup = () => {
         setShowSuccessPopup(false);
@@ -138,6 +189,7 @@ export default function TabNavigator() {
     const closeFlow = () => {
         setShowLocationPopup(false);
         clearLastAuthAction();
+        clearGuestEntry();
     };
 
     const handleAllowLocation = async () => {
@@ -146,6 +198,11 @@ export default function TabNavigator() {
         } finally {
             closeFlow();
         }
+    };
+
+    const handleConfirmExit = () => {
+        setShowExitPopup(false);
+        BackHandler.exitApp();
     };
 
     return (
@@ -200,6 +257,12 @@ export default function TabNavigator() {
                 onPrimaryPress={handleAllowLocation}
                 secondaryLabel="Skip for now"
                 onSecondaryPress={closeFlow}
+            />
+
+            <ExitAppPopup
+                visible={showExitPopup}
+                onConfirmExit={handleConfirmExit}
+                onCancel={() => setShowExitPopup(false)}
             />
         </>
     );

@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, PipelineStage } from 'mongoose';
+import { Model, PipelineStage, Types } from 'mongoose';
 import { NearbyPlacesDto } from './dto/nearby-places.dto';
 import { SeedPlacesDto } from './dto/seed-places.dto';
 import { OverpassClient } from './overpass.client';
@@ -39,6 +39,28 @@ type NearbyAggregateResult = {
   totalCount: Array<{ count: number }>;
 };
 
+type PlaceDetailsResponse = {
+  sourceId: string;
+  source: string;
+  name: string;
+  category: string;
+  location: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
+  accessibility: {
+    wheelchair: 'yes' | 'no' | 'limited' | 'unknown';
+    toiletsWheelchair: 'yes' | 'no' | 'unknown';
+  };
+  tagsSummary: {
+    address?: string;
+    website?: string;
+    phone?: string;
+    openingHours?: string;
+  };
+  updatedAt: Date;
+};
+
 @Injectable()
 export class PlacesService {
   private readonly logger = new Logger(PlacesService.name);
@@ -61,6 +83,11 @@ export class PlacesService {
     }
     if (query.wheelchair) {
       matchStage['accessibility.wheelchair'] = query.wheelchair;
+    } else if (query.wheelchairKnown) {
+      matchStage['accessibility.wheelchair'] = { $ne: 'unknown' };
+    }
+    if (query.toiletsWheelchair) {
+      matchStage['accessibility.toiletsWheelchair'] = query.toiletsWheelchair;
     }
 
     const pipeline: PipelineStage[] = [
@@ -162,6 +189,49 @@ export class PlacesService {
     };
   }
 
+  async getPlaceById(id: string): Promise<PlaceDetailsResponse> {
+    const lookupQuery = Types.ObjectId.isValid(id)
+      ? {
+          $or: [
+            { sourceId: id },
+            { _id: new Types.ObjectId(id) },
+          ],
+        }
+      : { sourceId: id };
+
+    const place = await this.placeModel.findOne(lookupQuery).lean().exec();
+
+    if (!place) {
+      throw new NotFoundException(`Place not found for id: ${id}`);
+    }
+
+    const tags = place.tags ?? {};
+    const addressParts = [
+      this.getTagValue(tags, 'addr:housenumber'),
+      this.getTagValue(tags, 'addr:street'),
+      this.getTagValue(tags, 'addr:city'),
+    ].filter((value): value is string => Boolean(value));
+
+    return {
+      sourceId: place.sourceId,
+      source: place.source,
+      name: place.name ?? '',
+      category: place.category ?? 'other',
+      location: place.location,
+      accessibility: {
+        wheelchair: place.accessibility?.wheelchair ?? 'unknown',
+        toiletsWheelchair: place.accessibility?.toiletsWheelchair ?? 'unknown',
+      },
+      tagsSummary: {
+        address: addressParts.length ? addressParts.join(', ') : undefined,
+        website: this.getTagValue(tags, 'website'),
+        phone: this.getTagValue(tags, 'phone'),
+        openingHours: this.getTagValue(tags, 'opening_hours'),
+      },
+      updatedAt: place.updatedAt,
+    };
+  }
+
   private normalizeElement(element: OverpassElement): NormalizedPlace | null {
     const tags = element.tags ?? {};
     const lon = element.lon ?? element.center?.lon;
@@ -224,5 +294,15 @@ export class PlacesService {
       return value;
     }
     return 'unknown';
+  }
+
+  private getTagValue(tags: Record<string, unknown>, key: string): string | undefined {
+    const value = tags[key];
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 }

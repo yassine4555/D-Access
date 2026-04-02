@@ -70,3 +70,6 @@ export const PlaceSchema = SchemaFactory.createForClass(Place);
 
 PlaceSchema.index({ location: '2dsphere' });
 PlaceSchema.index({ source: 1, osmType: 1, osmId: 1 }, { unique: true });
+PlaceSchema.index({ 'accessibility.wheelchair': 1 });
+PlaceSchema.index({ 'accessibility.toiletsWheelchair': 1 });
+PlaceSchema.index({ category: 1, 'accessibility.wheelchair': 1 });

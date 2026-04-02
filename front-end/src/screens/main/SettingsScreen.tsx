@@ -8,31 +8,78 @@ import {
     StatusBar,
     Switch,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { colors } from '../../constants/colors';
-import { shared, RADIUS, FONT, SPACING } from '../../constants/sharedStyles';
+import { shared, RADIUS } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { SettingsAccessibilityIcon } from '../../components/icons/SettingsAccessibilityIcon';
+import { SettingsDarkModeIcon } from '../../components/icons/SettingsDarkModeIcon';
+import { SettingsFavoriteIcon } from '../../components/icons/SettingsFavoriteIcon';
+import { SettingsGetHelpIcon } from '../../components/icons/SettingsGetHelpIcon';
+import { SettingsTranslateIcon } from '../../components/icons/SettingsTranslateIcon';
+import { SettingsUserCircleIcon } from '../../components/icons/SettingsUserCircleIcon';
+import { SignOutPopup } from '../../components/common/SignOutPopup';
 import { useAuth } from '../../context/AuthContext';
 import { resetToWelcomeOnRoot, pushLoginOnRoot } from '../../navigation/navigationRef';
 import { SettingsScreenProps } from '../../types/navigation';
 
-const SETTINGS_ITEMS = [
-    { id: 'EditProfile', icon: '👤', label: 'Edit profile', type: 'link' },
-    { id: 'Favorites', icon: '❤️', label: 'Favorite', type: 'link' },
-    { id: 'Language', icon: '🌐', label: 'Change language', type: 'link' },
-    { id: 'ColorMode', icon: '🌙', label: 'Color mode', type: 'switch' },
-    { id: 'Accessibility', icon: '♿', label: 'Accessibility', type: 'link' },
-    { id: 'Help', icon: '❓', label: 'Get help', type: 'link' },
+type SettingsItemId = 'EditProfile' | 'Favorites' | 'Language' | 'ColorMode' | 'Accessibility' | 'Help';
+
+type SettingsItem = {
+    id: SettingsItemId;
+    label: string;
+    type: 'link' | 'switch';
+};
+
+const SETTINGS_ITEMS: SettingsItem[] = [
+    { id: 'EditProfile', label: 'Edit profile', type: 'link' },
+    { id: 'Favorites', label: 'Favorite', type: 'link' },
+    { id: 'Language', label: 'Change language', type: 'link' },
+    { id: 'ColorMode', label: 'Color mode', type: 'switch' },
+    { id: 'Accessibility', label: 'Accessibility', type: 'link' },
+    { id: 'Help', label: 'Get help', type: 'link' },
 ];
+
+const ChevronRightIcon = ({ color = '#111111' }: { color?: string }) => (
+    <Svg width={15} height={15} viewBox="0 0 15 15" fill="none">
+        <Path d="M5.5 3L9.5 7.5L5.5 12" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+);
+
+const SettingItemIcon = ({ id }: { id: SettingsItemId }) => {
+    switch (id) {
+        case 'EditProfile':
+            return <SettingsUserCircleIcon />;
+        case 'Favorites':
+            return <SettingsFavoriteIcon />;
+        case 'Language':
+            return <SettingsTranslateIcon />;
+        case 'ColorMode':
+            return <SettingsDarkModeIcon />;
+        case 'Accessibility':
+            return <SettingsAccessibilityIcon />;
+        case 'Help':
+            return <SettingsGetHelpIcon />;
+        default:
+            return null;
+    }
+};
 
 export default function SettingsScreen({ navigation }: SettingsScreenProps<'SettingsMain'>) {
     const { logout, isAuthenticated } = useAuth();
     const [isDarkMode, setIsDarkMode] = useState(false);
+    const [isSignOutPopupVisible, setIsSignOutPopupVisible] = useState(false);
 
-    const handleLogout = async () => {
+    const confirmLogout = async () => {
+        setIsSignOutPopupVisible(false);
         await logout();
         if (!resetToWelcomeOnRoot()) {
             navigation.navigate('Welcome');
         }
+    };
+
+    const handleLogoutPress = () => {
+        setIsSignOutPopupVisible(true);
     };
 
     const handlePress = (id: string) => {
@@ -54,61 +101,66 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps<'Sett
     };
 
     return (
-        <View style={shared.container}>
-            <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+        <View style={[shared.container, styles.screenContainer]}>
+            <StatusBar barStyle="dark-content" backgroundColor="#F4F4F4" />
 
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.floatingButton, { position: 'absolute', top: 45, left: 16, zIndex: 10 }]}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <BackIcon color={colors.gray900} />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { position: 'absolute', top: 45, right: 16, zIndex: 10 }]}>Account Setting</Text>
-                <View style={{ width: 44 }} />
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                <Text style={styles.headerTitle}>Account Setting</Text>
+
                 {/* Settings List */}
                 <View style={styles.listContainer}>
                     {SETTINGS_ITEMS.map((item) => (
-                        <View key={item.id} style={styles.rowWrapper}>
-                            <TouchableOpacity
-                                style={styles.itemRow}
-                                onPress={() => item.type === 'link' && handlePress(item.id)}
-                                disabled={item.type === 'switch'}
-                            >
-                                <View style={styles.iconCircle}>
-                                    <Text style={styles.iconEmoji}>{item.icon}</Text>
-                                </View>
-                                <Text style={styles.label}>{item.label}</Text>
+                        <TouchableOpacity
+                            key={item.id}
+                            style={styles.itemRow}
+                            onPress={() => item.type === 'link' && handlePress(item.id)}
+                            disabled={item.type === 'switch'}
+                            activeOpacity={0.8}
+                        >
+                            <View style={styles.leadingIconWrap}>
+                                <SettingItemIcon id={item.id} />
+                            </View>
+                            <Text style={styles.label}>{item.label}</Text>
 
-                                {item.type === 'link' ? (
-                                    <View style={styles.chevron}>
-                                        <Text style={styles.chevronText}>›</Text>
-                                    </View>
-                                ) : (
-                                    <Switch
-                                        value={isDarkMode}
-                                        onValueChange={setIsDarkMode}
-                                        trackColor={{ false: colors.gray200, true: colors.primary }}
-                                        thumbColor={colors.white}
-                                    />
-                                )}
-                            </TouchableOpacity>
-                            <View style={styles.divider} />
-                        </View>
+                            {item.type === 'link' ? (
+                                <ChevronRightIcon />
+                            ) : (
+                                <Switch
+                                    value={isDarkMode}
+                                    onValueChange={setIsDarkMode}
+                                    trackColor={{ false: '#D2D5DA', true: colors.primary }}
+                                    thumbColor={colors.white}
+                                    ios_backgroundColor="#D2D5DA"
+                                    style={styles.switchControl}
+                                />
+                            )}
+                        </TouchableOpacity>
                     ))}
                 </View>
 
                 {/* Sign Out / Sign In Button */}
                 {isAuthenticated ? (
-                    <TouchableOpacity style={styles.signOutBtn} onPress={handleLogout}>
+                    <TouchableOpacity style={styles.signOutBtn} onPress={handleLogoutPress} activeOpacity={0.9}>
                         <Text style={styles.signOutText}>Sign out</Text>
                     </TouchableOpacity>
                 ) : (
-                    <TouchableOpacity style={[styles.signOutBtn, { backgroundColor: colors.primary }]} onPress={() => pushLoginOnRoot()}>
+                    <TouchableOpacity style={[styles.signOutBtn, { backgroundColor: colors.primary }]} onPress={() => pushLoginOnRoot()} activeOpacity={0.9}>
                         <Text style={styles.signOutText}>Sign In</Text>
                     </TouchableOpacity>
                 )}
+
+                <SignOutPopup
+                    visible={isSignOutPopupVisible}
+                    onConfirmLogOut={confirmLogout}
+                    onCancel={() => setIsSignOutPopupVisible(false)}
+                />
 
                 <View style={shared.bottomSpacer} />
             </ScrollView>
@@ -117,102 +169,71 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps<'Sett
 }
 
 const styles = StyleSheet.create({
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: 54,
-        paddingBottom: 16,
-        paddingHorizontal: 16,
+    screenContainer: {
+        backgroundColor: '#F4F4F4',
     },
-    floatingButton: {
-        backgroundColor: '#fff',       // make sure button has background
-        padding: 10,
-        borderRadius: 25,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 3,
-        elevation: 5,                  // for Android
+    header: {
+        paddingTop: 52,
+        paddingHorizontal: 20,
+        paddingBottom: 6,
     },
     backButton: {
-        width: 44,
-        height: 44,
-        alignItems: 'center',
+        width: 32,
+        height: 32,
         justifyContent: 'center',
     },
-    backIcon: {
-        fontSize: 32,
-        color: colors.gray900,
-        fontWeight: '300',
-    },
     headerTitle: {
-        fontSize: FONT.title,
-        fontWeight: '800',
-        color: colors.gray900,
+        fontSize: 30,
+        lineHeight: 35,
+        fontWeight: '600',
+        color: '#000000',
+        marginBottom: 20,
     },
     scrollContent: {
-        paddingTop: SPACING.md,
+        paddingHorizontal: 20,
+        paddingBottom: 36,
     },
     listContainer: {
-        paddingHorizontal: 16,
-    },
-    rowWrapper: {
-        marginBottom: 16,
+        gap: 16,
     },
     itemRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.white,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: RADIUS.xl,
+        backgroundColor: '#FFFFFF',
         borderWidth: 1,
-        borderColor: colors.gray100,
+        borderColor: 'rgba(0, 0, 0, 0.10)',
+        borderRadius: 10,
+        paddingHorizontal: 15,
+        paddingVertical: 20,
+        minHeight: 62,
     },
-    iconCircle: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+    leadingIconWrap: {
+        width: 22,
+        height: 22,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: 12,
-    },
-    iconEmoji: {
-        fontSize: 18,
+        marginRight: 10,
     },
     label: {
         flex: 1,
         fontSize: 16,
-        fontWeight: '600',
-        color: colors.gray900,
+        lineHeight: 22,
+        fontWeight: '400',
+        color: '#000000',
     },
-    chevron: {
-        width: 24,
-        height: 24,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    chevronText: {
-        fontSize: 24,
-        color: colors.gray900,
-        fontWeight: '300',
-    },
-    divider: {
-        // Option to add a line between rows if preferred, but design uses cards
-        height: 0,
+    switchControl: {
+        transform: [{ scaleX: 0.86 }, { scaleY: 0.86 }],
     },
     signOutBtn: {
-        backgroundColor: '#EF4444',
-        marginHorizontal: 16,
+        backgroundColor: '#DC2626',
         marginTop: 24,
-        paddingVertical: 16,
+        paddingVertical: 14,
         borderRadius: RADIUS.lg,
         alignItems: 'center',
     },
     signOutText: {
-        color: colors.white,
-        fontWeight: '700',
+        color: '#F4F3F5',
+        fontWeight: '500',
         fontSize: 16,
     },
 });

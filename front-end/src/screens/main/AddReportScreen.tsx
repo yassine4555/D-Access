@@ -15,14 +15,50 @@ import { useAuth } from '../../context/AuthContext';
 import { AuthRequiredPopup } from '../../components/common/AuthRequiredPopup';
 import { pushLoginOnRoot } from '../../navigation/navigationRef';
 
-const CATEGORIES = ['Not accessible', 'Partially accessible', 'Accessible'];
+type ReportType = 'incorrect' | 'elevator' | 'ramp' | 'parking' | 'closed' | 'other' | null;
+
+const REPORT_OPTIONS = [
+    {
+        id: 'incorrect',
+        title: 'Incorrect Accessibility Info',
+        description: 'Features listed don\'t match reality',
+        icon: '⚠️',
+    },
+    {
+        id: 'elevator',
+        title: 'Elevator Out of Order',
+        description: 'Elevator is not working properly',
+        icon: '↕️',
+    },
+    {
+        id: 'ramp',
+        title: 'Ramp Blocked',
+        description: 'Ramp or entrance is obstructed',
+        icon: '⛔',
+    },
+    {
+        id: 'parking',
+        title: 'Parking Issue',
+        description: 'Accessible parking unavailable or blocked',
+        icon: '🅿️',
+    },
+    {
+        id: 'closed',
+        title: 'Place Closed',
+        description: 'Business is temporarily or permanently closed',
+        icon: '📍',
+    },
+    {
+        id: 'other',
+        title: 'Other Issue',
+        description: 'Something else needs attention',
+        icon: '⋯',
+    },
+];
 
 export default function AddReportScreen({ navigation }: MapScreenProps<'AddReport'>) {
     const { isAuthenticated } = useAuth();
-    const [category, setCategory] = useState('Not accessible');
-    const [showDropdown, setShowDropdown] = useState(false);
-    const [tags, setTags] = useState<string[]>(['Steps']);
-    const [tagInput, setTagInput] = useState('');
+    const [selectedReport, setSelectedReport] = useState<ReportType>(null);
     const [description, setDescription] = useState('');
 
     const handleContinueAsGuest = () => {
@@ -38,17 +74,6 @@ export default function AddReportScreen({ navigation }: MapScreenProps<'AddRepor
             return;
         }
         navigation.navigate('Login');
-    };
-
-    const addTag = () => {
-        if (tagInput.trim()) {
-            setTags([...tags, tagInput.trim()]);
-            setTagInput('');
-        }
-    };
-
-    const removeTag = (index: number) => {
-        setTags(tags.filter((_, i) => i !== index));
     };
 
     if (!isAuthenticated) {
@@ -71,17 +96,27 @@ export default function AddReportScreen({ navigation }: MapScreenProps<'AddRepor
 
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.floatingButton, { position: 'absolute', top: 45, left: 16, zIndex: 10 }]}>
-                        <BackIcon color={colors.gray900} />
-                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.submitBtn, { position: 'absolute', top: 45, right: 16, zIndex: 10 }]}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.floatingButton}>
+                    <BackIcon color={colors.gray900} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.submitBtn}>
                     <Text style={styles.submitBtnText}>Submit</Text>
                 </TouchableOpacity>
             </View>
                 
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+                {/* Icon Section */}
+                <View style={styles.iconSection}>
+                    <View style={styles.iconWrapper}>
+                        <Text style={styles.iconText}>🚩</Text>
+                    </View>
+                </View>
+
+                {/* Title and Description */}
+                <Text style={styles.title}>Help Keep Information Accurate</Text>
+                <Text style={styles.subtitle}>Your report helps the community stay informed about accessibility changes</Text>
+
                 {/* Map Preview */}
-            <View style={{ marginTop: 40 }}>
                 <View style={styles.mapPreview}>
                     <View style={styles.mapPlaceholder}>
                         <Text style={{ fontSize: 32 }}>🗺️</Text>
@@ -90,69 +125,38 @@ export default function AddReportScreen({ navigation }: MapScreenProps<'AddRepor
                         <Text style={{ fontSize: 14 }}>⛶</Text>
                     </TouchableOpacity>
                 </View>
-            </View>
              
                 <Text style={styles.addressText}>123 Main St, San Francisco, CA 94103</Text>
-                <Text style={styles.distanceText}>350 ft from your location   ✏️</Text>
+                <Text style={styles.distanceText}>350 ft from your location</Text>
 
-                {/* Category */}
-                <Text style={styles.label}>Category</Text>
-                <TouchableOpacity
-                    style={styles.dropdown}
-                    onPress={() => setShowDropdown(!showDropdown)}
-                >
-                    <Text style={styles.dropdownText}>{category}</Text>
-                    <Text style={styles.dropdownArrow}>▾</Text>
-                </TouchableOpacity>
+                {/* Report Options */}
+                {REPORT_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                        key={option.id}
+                        style={styles.reportOption}
+                        onPress={() => setSelectedReport(option.id as ReportType)}
+                    >
+                        <View style={styles.radioButton}>
+                            {selectedReport === option.id && (
+                                <View style={styles.radioSelected} />
+                            )}
+                        </View>
+                        <Text style={styles.reportIcon}>{option.icon}</Text>
+                        <View style={styles.reportContent}>
+                            <Text style={styles.reportTitle}>{option.title}</Text>
+                            <Text style={styles.reportDescription}>{option.description}</Text>
+                        </View>
+                    </TouchableOpacity>
+                ))}
 
-                {showDropdown && (
-                    <View style={styles.dropdownList}>
-                        {CATEGORIES.map((cat) => (
-                            <TouchableOpacity
-                                key={cat}
-                                style={styles.dropdownItem}
-                                onPress={() => {
-                                    setCategory(cat);
-                                    setShowDropdown(false);
-                                }}
-                            >
-                                <Text style={[
-                                    styles.dropdownItemText,
-                                    cat === category && { color: colors.primary, fontWeight: '600' },
-                                ]}>{cat}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-
-                {/* Tags */}
-                <View style={styles.tagsContainer}>
-                    {tags.map((tag, idx) => (
-                        <TouchableOpacity
-                            key={idx}
-                            style={styles.tagChip}
-                            onPress={() => removeTag(idx)}
-                        >
-                            <Text style={styles.tagChipText}>{tag}</Text>
-                            <Text style={styles.tagChipX}>  ×</Text>
-                        </TouchableOpacity>
-                    ))}
-                    <TextInput
-                        style={styles.tagInput}
-                        placeholder="Enter tags to describe the situation"
-                        placeholderTextColor={colors.gray400}
-                        value={tagInput}
-                        onChangeText={setTagInput}
-                        onSubmitEditing={addTag}
-                    />
-                </View>
-
-                {/* Description */}
+                {/* Additional Details */}
+                <Text style={styles.additionalLabel}>Additional Details (Optional)</Text>
+                <Text style={styles.additionalHint}>Keep it respectful and factual</Text>
                 <View style={styles.descriptionBox}>
                     <TextInput
                         style={styles.descriptionInput}
-                        placeholder="Describe the issue..."
-                        placeholderTextColor={colors.gray400}
+                        placeholder="Describe the issue…"
+                        placeholderTextColor={colors.gray900}
                         multiline
                         value={description}
                         onChangeText={setDescription}
@@ -161,9 +165,9 @@ export default function AddReportScreen({ navigation }: MapScreenProps<'AddRepor
                 </View>
 
                 {/* Photos */}
-                <Text style={styles.label}>Photos</Text>
+                <Text style={styles.photosLabel}>Photos</Text>
                 <TouchableOpacity style={styles.photoUpload}>
-                    <Text style={{ fontSize: 24, color: colors.gray400, marginBottom: 4 }}>⬇</Text>
+                    <Text style={styles.downloadIcon}>⬇</Text>
                     <Text style={styles.photoUploadText}>Click or drop image</Text>
                 </TouchableOpacity>
 
@@ -187,39 +191,72 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingBottom: 12,
     },
-    backBtn: {
-        fontSize: 28,
-        color: colors.gray700,
+    floatingButton: {
+        backgroundColor: '#fff',
+        padding: 10,
+        borderRadius: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 5,
     },
     submitBtn: {
-        backgroundColor: colors.primary,
-        paddingHorizontal: 20,
+        backgroundColor: '#4AAFD9',
+        paddingHorizontal: 28,
         paddingVertical: 10,
-        borderRadius: 8,
+        borderRadius: 10,
     },
-     floatingButton: {
-  backgroundColor: '#fff',       // make sure button has background
-  padding: 10,
-  borderRadius: 25,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 3,
-  elevation: 5,                  // for Android
-},
     submitBtnText: {
-        color: colors.white,
+        color: '#F4F3F5',
         fontWeight: '600',
         fontSize: 14,
+        fontFamily: 'Poppins',
     },
     scrollView: {
         flex: 1,
         paddingHorizontal: 16,
     },
+    // Icon Section
+    iconSection: {
+        alignItems: 'center',
+        marginTop: 24,
+        marginBottom: 24,
+    },
+    iconWrapper: {
+        width: 100,
+        height: 100,
+        borderRadius: 10,
+        backgroundColor: '#BAE6FD',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    iconText: {
+        fontSize: 64,
+    },
+    // Title & Description
+    title: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: colors.gray900,
+        textAlign: 'center',
+        marginBottom: 12,
+        fontFamily: 'Poppins',
+        lineHeight: 28,
+    },
+    subtitle: {
+        fontSize: 16,
+        fontWeight: '400',
+        color: colors.gray900,
+        textAlign: 'center',
+        marginBottom: 20,
+        fontFamily: 'Poppins',
+        lineHeight: 22,
+    },
     // Map
     mapPreview: {
         height: 200,
-        borderRadius: 16,
+        borderRadius: 10,
         overflow: 'hidden',
         backgroundColor: '#E5F0E5',
         marginBottom: 12,
@@ -242,124 +279,127 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     addressText: {
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: '600',
         color: colors.gray900,
-        marginBottom: 2,
+        marginBottom: 4,
+        fontFamily: 'Poppins',
     },
     distanceText: {
-        fontSize: 13,
-        color: colors.gray500,
-        marginBottom: 20,
+        fontSize: 14,
+        fontWeight: '400',
+        color: colors.gray900,
+        marginBottom: 24,
+        fontFamily: 'Poppins',
     },
-    // Category
-    label: {
-        fontSize: 15,
+    // Report Options
+    reportOption: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        borderWidth: 1,
+        borderColor: '#DFDEDE',
+        borderRadius: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+        marginBottom: 12,
+        gap: 12,
+    },
+    radioButton: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#919191',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 2,
+    },
+    radioSelected: {
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        backgroundColor: '#919191',
+    },
+    reportIcon: {
+        fontSize: 24,
+        width: 24,
+        textAlign: 'center',
+    },
+    reportContent: {
+        flex: 1,
+    },
+    reportTitle: {
+        fontSize: 16,
         fontWeight: '600',
         color: colors.gray900,
-        marginBottom: 8,
+        marginBottom: 4,
+        fontFamily: 'Poppins',
     },
-    dropdown: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.gray200,
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        marginBottom: 16,
-    },
-    dropdownText: {
-        fontSize: 14,
-        color: colors.gray700,
-    },
-    dropdownArrow: {
+    reportDescription: {
         fontSize: 16,
-        color: colors.gray400,
+        fontWeight: '400',
+        color: '#333',
+        fontFamily: 'Poppins',
     },
-    dropdownList: {
-        borderWidth: 1,
-        borderColor: colors.gray200,
-        borderRadius: 10,
-        marginBottom: 16,
-        marginTop: -12,
-        overflow: 'hidden',
+    // Additional Details
+    additionalLabel: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: colors.gray900,
+        marginTop: 20,
+        marginBottom: 8,
+        fontFamily: 'Poppins',
     },
-    dropdownItem: {
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.gray100,
+    additionalHint: {
+        fontSize: 16,
+        fontWeight: '400',
+        color: '#4B5563',
+        marginBottom: 12,
+        fontFamily: 'Poppins',
     },
-    dropdownItemText: {
-        fontSize: 14,
-        color: colors.gray700,
-    },
-    // Tags
-    tagsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.gray200,
-        borderRadius: 10,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
-        marginBottom: 16,
-        gap: 6,
-    },
-    tagChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.primary,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 14,
-    },
-    tagChipText: {
-        color: colors.white,
-        fontSize: 13,
-        fontWeight: '500',
-    },
-    tagChipX: {
-        color: colors.white,
-        fontSize: 14,
-    },
-    tagInput: {
-        flex: 1,
-        minWidth: 120,
-        fontSize: 14,
-        color: colors.gray800,
-        paddingVertical: 4,
-    },
-    // Description
     descriptionBox: {
         borderWidth: 1,
-        borderColor: colors.gray200,
+        borderColor: '#D4D4D4',
         borderRadius: 10,
         marginBottom: 20,
         padding: 12,
-        minHeight: 100,
+        minHeight: 118,
+        backgroundColor: colors.white,
     },
     descriptionInput: {
         fontSize: 14,
-        color: colors.gray800,
-        minHeight: 80,
+        fontWeight: '400',
+        color: colors.gray900,
+        minHeight: 100,
+        paddingVertical: 0,
+        fontFamily: 'Poppins',
     },
-    // Photo
+    // Photos
+    photosLabel: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: colors.gray900,
+        marginBottom: 12,
+        fontFamily: 'Poppins',
+    },
     photoUpload: {
-        height: 140,
-        borderRadius: 12,
-        backgroundColor: '#F9FAFB',
+        height: 200,
+        borderRadius: 10,
+        backgroundColor: 'rgba(0, 0, 0, 0.08)',
         borderWidth: 1,
-        borderColor: colors.gray200,
-        borderStyle: 'dashed',
+        borderColor: '#D4D4D4',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: 6,
+    },
+    downloadIcon: {
+        fontSize: 24,
+        color: colors.gray400,
     },
     photoUploadText: {
         fontSize: 14,
-        color: colors.gray500,
+        fontWeight: '600',
+        color: '#303030',
+        fontFamily: 'Poppins',
     },
 });

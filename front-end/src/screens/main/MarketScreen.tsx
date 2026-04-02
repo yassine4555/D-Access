@@ -12,6 +12,8 @@ import {
 import { colors } from '../../constants/colors';
 import { shared, SPACING, RADIUS, FONT, SEMANTIC_COLORS } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
+import { SearchIcon } from '../../components/icons/searchIcon';
+import { MicrophoneIcon } from '../../components/icons/MicrophoneIcon';
 import { TabScreenProps } from '../../types/navigation';
 
 const PRODUCTS = [
@@ -38,25 +40,27 @@ export default function MarketplaceScreen({ navigation }: TabScreenProps<'Market
 
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.floatingButton, { position: 'absolute', top: 45, left: 16, zIndex: 10 }]}>
-                                        <BackIcon color={colors.gray900} />
-                    </TouchableOpacity>
-                <Text style={[styles.headerTitle, {position: 'absolute', top: 45, right: 16 , zIndex: 10}]}>Marketplace</Text>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.floatingButton}>
+                    <BackIcon color={colors.gray900} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Marketplace</Text>
                 <View style={{ width: 44 }} />
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 {/* Search Bar */}
-                <View style={shared.searchRow}>
-                    <View style={shared.searchBar}>
-                        <Text style={shared.searchIcon}>🔍</Text>
+                <View style={styles.searchBarContainer}>
+                    <View style={styles.searchBar}>
+                        <View style={styles.searchIconWrapper}>
+                            <SearchIcon color="#CAC9C9" />
+                        </View>
                         <TextInput
-                            style={shared.searchInput}
+                            style={styles.searchInput}
                             placeholder="Search"
-                            placeholderTextColor={colors.gray400}
+                            placeholderTextColor="#CAC9C9"
                         />
-                        <TouchableOpacity>
-                            <Text style={shared.iconEmoji}>🎤</Text>
+                        <TouchableOpacity style={styles.microphoneIconWrapper}>
+                            <MicrophoneIcon color="#CAC9C9" />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -104,20 +108,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-     floatingButton: {
-  backgroundColor: '#fff',       // make sure button has background
-  padding: 10,
-  borderRadius: 25,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 3,
-  elevation: 5,                  // for Android
-},
-    backIcon: {
-        fontSize: 32,
-        color: colors.gray900,
-        fontWeight: '300',
+    floatingButton: {
+        backgroundColor: '#fff',
+        padding: 10,
+        borderRadius: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 5,
     },
     headerTitle: {
         fontSize: FONT.title,
@@ -127,21 +126,51 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingTop: SPACING.md,
     },
+    searchBarContainer: {
+        paddingHorizontal: SPACING.lg,
+        marginBottom: SPACING.lg,
+    },
+    searchBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.white,
+        borderRadius: RADIUS.lg,
+        borderWidth: 1,
+        borderColor: '#DFDEDE',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        gap: 10,
+    },
+    searchIconWrapper: {
+        width: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    microphoneIconWrapper: {
+        width: 24,
+        height: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: colors.gray900,
+        paddingVertical: 0,
+        fontFamily: 'Encode Sans',
+    },
     productCard: {
         backgroundColor: colors.white,
-        borderRadius: RADIUS.xxl,
+        borderRadius: 10,
         marginHorizontal: SPACING.lg,
         marginBottom: SPACING.xl,
         overflow: 'hidden',
-        // Shadow for iOS
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.1,
-        shadowRadius: 10,
-        // Elevation for Android
-        elevation: 5,
-        borderWidth: 1,
-        borderColor: colors.gray100,
+        shadowRadius: 16,
+        elevation: 2,
     },
     productImage: {
         width: '100%',
@@ -149,46 +178,53 @@ const styles = StyleSheet.create({
         resizeMode: 'cover',
     },
     productInfo: {
-        padding: SPACING.lg,
+        padding: 16,
     },
     titlePriceRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: SPACING.sm,
+        marginBottom: 8,
     },
     productTitle: {
         flex: 1,
         fontSize: 18,
-        fontWeight: '800',
+        fontWeight: '700',
         color: colors.gray900,
-        lineHeight: 24,
+        lineHeight: 25,
         marginRight: SPACING.md,
+        fontFamily: 'Poppins',
     },
     productPrice: {
         fontSize: 18,
-        fontWeight: '800',
-        color: SEMANTIC_COLORS.dark,
+        fontWeight: '700',
+        color: '#082F49',
+        lineHeight: 25,
+        fontFamily: 'Poppins',
     },
     productDescription: {
-        fontSize: 14,
-        color: colors.gray600,
-        lineHeight: 20,
-        marginBottom: SPACING.lg,
+        fontSize: 12,
+        fontWeight: '400',
+        color: colors.gray900,
+        lineHeight: 18,
+        marginBottom: 16,
+        fontFamily: 'Poppins',
     },
     actionButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#4EAFD0', // Custom blue from design
-        paddingVertical: 14,
-        borderRadius: RADIUS.lg,
+        backgroundColor: '#4AAFD9',
+        paddingVertical: 12,
+        paddingHorizontal: 32,
+        borderRadius: 10,
     },
     actionButtonText: {
         color: colors.white,
         fontWeight: '600',
-        fontSize: 15,
+        fontSize: 16,
         marginRight: 8,
+        fontFamily: 'Manrope',
     },
     chevron: {
         color: colors.white,
