@@ -5,6 +5,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuthController } from '../src/auth/auth.controller';
@@ -78,7 +79,7 @@ describe('Auth + Places endpoints (e2e)', () => {
   });
 
   it('POST /auth/register should create account and return token', async () => {
-    authServiceMock.register.mockResolvedValue({
+    authServiceMock.register.mockReturnValue(Promise.resolve({
       access_token: 'token-1',
       user: {
         _id: 'u1',
@@ -87,7 +88,7 @@ describe('Auth + Places endpoints (e2e)', () => {
         lastName: 'User',
         role: 'user',
       },
-    });
+    }));
 
     const response = await request(app.getHttpServer())
       .post('/auth/register')
@@ -104,7 +105,7 @@ describe('Auth + Places endpoints (e2e)', () => {
   });
 
   it('POST /auth/login should reject invalid credentials', async () => {
-    authServiceMock.validateUser.mockResolvedValue(null);
+    authServiceMock.validateUser.mockReturnValue(Promise.resolve(null));
 
     await request(app.getHttpServer())
       .post('/auth/login')
@@ -134,7 +135,7 @@ describe('Auth + Places endpoints (e2e)', () => {
   });
 
   it('GET /places/nearby should validate query and return result', async () => {
-    placesServiceMock.findNearby.mockResolvedValue({
+    placesServiceMock.findNearby.mockReturnValue(Promise.resolve({
       data: [
         {
           sourceId: 'osm:node:1',
@@ -147,7 +148,7 @@ describe('Auth + Places endpoints (e2e)', () => {
         total: 1,
         totalPages: 1,
       },
-    });
+    }));
 
     const response = await request(app.getHttpServer())
       .get('/places/nearby?lat=36.8&lon=10.1&radius=1500&page=1&limit=20&wheelchairKnown=true')
@@ -173,7 +174,7 @@ describe('Auth + Places endpoints (e2e)', () => {
   });
 
   it('GET /places/:id should return place details', async () => {
-    placesServiceMock.getPlaceById.mockResolvedValue({
+    placesServiceMock.getPlaceById.mockReturnValue(Promise.resolve({
       sourceId: 'osm:node:123',
       source: 'osm',
       name: 'Place One',
@@ -188,7 +189,7 @@ describe('Auth + Places endpoints (e2e)', () => {
       },
       tagsSummary: {},
       updatedAt: new Date().toISOString(),
-    });
+    }));
 
     const response = await request(app.getHttpServer())
       .get('/places/osm%3Anode%3A123')

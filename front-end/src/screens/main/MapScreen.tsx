@@ -60,6 +60,7 @@ const FALLBACK_REGION: Region = {
 const DEFAULT_RADIUS_METERS = 5000;
 const DISTANCE_PRESETS_METERS = [500, 1000, 1500, 2500, 5000] as const;
 const DEFAULT_LIMIT = 30;
+const CLUSTER_ZOOM_THRESHOLD = 0.032; // Approx zoom level 15-16 where clustering starts   but  32 is the best
 const TILE_URL_TEMPLATE =
   process.env.EXPO_PUBLIC_TILE_URL ||
   'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'; //https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png
@@ -78,6 +79,26 @@ function formatDistance(distanceMeters?: number): string {
   return `${(distanceMeters / 1000).toFixed(1)} Km`;
 }
 
+function distanceBetweenMeters(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+): number {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusMeters = 6371000;
+
+  const dLat = toRadians(to.latitude - from.latitude);
+  const dLon = toRadians(to.longitude - from.longitude);
+  const lat1 = toRadians(from.latitude);
+  const lat2 = toRadians(to.latitude);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return earthRadiusMeters * c;
+}
+
 type ClusteredMarker = {
   key: string;
   latitude: number;
@@ -94,56 +115,74 @@ function buildClusteredMarkers(
   sourcePlaces: NearbyPlace[],
   region: Region,
 ): MarkerRenderItem[] {
-  const latStep = Math.max(region.latitudeDelta / 28, 0.0004);
-  const lonStep = Math.max(region.longitudeDelta / 28, 0.0004);
-  const buckets = new Map<string, NearbyPlace[]>();
+  const viewHeightMeters = region.latitudeDelta * 111000;
+  const clusterRadiusMeters = Math.min(
+    650,
+    Math.max(45, viewHeightMeters * 0.07),
+  );
+
+  const clusters: {
+    latitude: number;
+    longitude: number;
+    places: NearbyPlace[];
+  }[] = [];
 
   sourcePlaces.forEach((place) => {
     const [lon, lat] = place.location.coordinates;
-    const latBucket = Math.floor((lat + 90) / latStep);
-    const lonBucket = Math.floor((lon + 180) / lonStep);
-    const key = `${latBucket}:${lonBucket}`;
+    const point = { latitude: lat, longitude: lon };
 
-    const bucket = buckets.get(key);
-    if (bucket) {
-      bucket.push(place);
-    } else {
-      buckets.set(key, [place]);
+    let targetClusterIndex = -1;
+    let smallestDistance = Number.MAX_SAFE_INTEGER;
+
+    for (let i = 0; i < clusters.length; i += 1) {
+      const cluster = clusters[i];
+      const distance = distanceBetweenMeters(point, {
+        latitude: cluster.latitude,
+        longitude: cluster.longitude,
+      });
+
+      if (distance <= clusterRadiusMeters && distance < smallestDistance) {
+        smallestDistance = distance;
+        targetClusterIndex = i;
+      }
     }
-  });
 
-  const result: MarkerRenderItem[] = [];
-
-  buckets.forEach((bucketPlaces, key) => {
-    if (bucketPlaces.length === 1) {
-      result.push({ kind: 'place', place: bucketPlaces[0] });
+    if (targetClusterIndex === -1) {
+      clusters.push({
+        latitude: lat,
+        longitude: lon,
+        places: [place],
+      });
       return;
     }
 
-    const totals = bucketPlaces.reduce(
-      (acc, place) => {
-        const [lon, lat] = place.location.coordinates;
-        return {
-          lat: acc.lat + lat,
-          lon: acc.lon + lon,
-        };
-      },
-      { lat: 0, lon: 0 },
-    );
+    const targetCluster = clusters[targetClusterIndex];
+    const updatedPlaces = [...targetCluster.places, place];
+    const updatedCount = updatedPlaces.length;
 
-    result.push({
-      kind: 'cluster',
-      cluster: {
-        key,
-        latitude: totals.lat / bucketPlaces.length,
-        longitude: totals.lon / bucketPlaces.length,
-        count: bucketPlaces.length,
-        places: bucketPlaces,
-      },
-    });
+    targetCluster.latitude =
+      (targetCluster.latitude * targetCluster.places.length + lat) / updatedCount;
+    targetCluster.longitude =
+      (targetCluster.longitude * targetCluster.places.length + lon) / updatedCount;
+    targetCluster.places = updatedPlaces;
   });
 
-  return result;
+  return clusters.map((cluster, index) => {
+    if (cluster.places.length === 1) {
+      return { kind: 'place' as const, place: cluster.places[0] };
+    }
+
+    return {
+      kind: 'cluster' as const,
+      cluster: {
+        key: `cluster-${index}-${cluster.places.length}`,
+        latitude: cluster.latitude,
+        longitude: cluster.longitude,
+        count: cluster.places.length,
+        places: cluster.places,
+      },
+    };
+  });
 }
 
 const BADGE_STYLES: Record<
@@ -258,6 +297,10 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
   // Reports will be populated once a reports API is available
   const [reports] = useState<ReportItem[]>([]);
   const [visibleRegion, setVisibleRegion] = useState<Region>(FALLBACK_REGION);
+  const [userCoordinates, setUserCoordinates] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   const mapRef = useRef<MapView | null>(null);
   const searchRadiusRef = useRef<number>(DEFAULT_RADIUS_METERS);
@@ -423,6 +466,11 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           longitudeDelta: 0.04,
         };
 
+        setUserCoordinates({
+          latitude: current.coords.latitude,
+          longitude: current.coords.longitude,
+        });
+
         currentRegionRef.current = nextRegion;
         lastRegionRef.current = nextRegion;
         setVisibleRegion(nextRegion);
@@ -501,6 +549,11 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
         longitudeDelta: 0.04,
       };
 
+      setUserCoordinates({
+        latitude: current.coords.latitude,
+        longitude: current.coords.longitude,
+      });
+
       currentRegionRef.current = nextRegion;
       lastRegionRef.current = nextRegion;
       setVisibleRegion(nextRegion);
@@ -534,6 +587,18 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
       (p.name ?? '').toLowerCase().includes(query),
     );
   }, [places, searchQuery]);
+
+  const getUserDistanceMeters = useCallback(
+    (place: NearbyPlace): number | undefined => {
+      if (!userCoordinates) {
+        return place.distanceMeters;
+      }
+
+      const [longitude, latitude] = place.location.coordinates;
+      return distanceBetweenMeters(userCoordinates, { latitude, longitude });
+    },
+    [userCoordinates],
+  );
 
   const zoomIn = () => {
     mapRef.current?.animateToRegion(
@@ -580,7 +645,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           place: {
             id: place.sourceId,
             name: place.name || 'Unnamed place',
-            distance: formatDistance(place.distanceMeters),
+            distance: formatDistance(getUserDistanceMeters(place)),
           },
         });
         return;
@@ -588,12 +653,13 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
 
       setSelectedPlaceId(place.sourceId);
     },
-    [navigation, selectedPlaceId],
+    [getUserDistanceMeters, navigation, selectedPlaceId],
   );
 
   const shouldClusterMarkers =
-    filteredPlaces.length >= 40 &&
-    (visibleRegion.latitudeDelta > 0.008 || visibleRegion.longitudeDelta > 0.008);
+    filteredPlaces.length > 1 &&
+    (visibleRegion.latitudeDelta > CLUSTER_ZOOM_THRESHOLD ||
+      visibleRegion.longitudeDelta > CLUSTER_ZOOM_THRESHOLD);
 
   const renderedMarkers = useMemo(() => {
     if (!shouldClusterMarkers) {
@@ -868,7 +934,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
                     place: {
                       id: place.sourceId,
                       name: place.name || 'Unnamed place',
-                      distance: formatDistance(place.distanceMeters),
+                      distance: formatDistance(getUserDistanceMeters(place)),
                     },
                   })
                 }
@@ -879,9 +945,9 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
                     {place.name || 'Unnamed place'}
                   </Text>
                   <View style={styles.placeMetaRow}>
-                    {!!formatDistance(place.distanceMeters) && (
+                    {!!formatDistance(getUserDistanceMeters(place)) && (
                       <Text style={styles.placeMeta}>
-                        {formatDistance(place.distanceMeters)}
+                        {formatDistance(getUserDistanceMeters(place))}
                       </Text>
                     )}
                     {place.category ? (
