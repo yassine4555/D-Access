@@ -44,7 +44,7 @@ const FILTER_CHIPS = ['All', 'Wheelchair', 'Entrance', 'Toilet', 'Elevator', 'Pa
 const CHIP_TO_CATEGORY: Record<string, string | undefined> = {
   All: undefined,
   Wheelchair: undefined,
-  Entrance: 'entrance',
+  Entrance: 'entrance',    // list mte3 les filters mte3 l api  w les categories mte3 les places 
   Toilet: 'toilets',
   Elevator: 'elevator',
   Parking: 'parking',
@@ -52,20 +52,20 @@ const CHIP_TO_CATEGORY: Record<string, string | undefined> = {
 
 const FALLBACK_REGION: Region = {
   latitude: 35.4162835,
-  longitude: 10.9987172,
+  longitude: 10.9987172,      // il region illi demarre minha l map ki ta7il lapp 
   latitudeDelta: 0.04,
   longitudeDelta: 0.04,
 };
 
 const DEFAULT_RADIUS_METERS = 5000;
 const DISTANCE_PRESETS_METERS = [500, 1000, 1500, 2500, 5000] as const;
-const DEFAULT_LIMIT = 30;
+const DEFAULT_LIMIT = 30;  // how many places reder to fetch from the API per request and display on the map (client-side clustering is applied on top of this)
 const CLUSTER_ZOOM_THRESHOLD = 0.032; // Approx zoom level 15-16 where clustering starts   but  32 is the best
-const TILE_URL_TEMPLATE =
+const TILE_URL_TEMPLATE =        // You can use your own tile server or a third-party one. Just make sure to respect the usage policies and provide proper attribution.
   process.env.EXPO_PUBLIC_TILE_URL ||
   'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'; //https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png
 
-function sortPlacesByDistance(places: NearbyPlace[]): NearbyPlace[] {
+function sortPlacesByDistance(places: NearbyPlace[]): NearbyPlace[] {  // Sort places by distance Sorts nearest → farthest and ensures places without distanceMeters are last
   return [...places].sort(
     (a, b) =>
       (a.distanceMeters ?? Number.MAX_SAFE_INTEGER) -
@@ -73,17 +73,17 @@ function sortPlacesByDistance(places: NearbyPlace[]): NearbyPlace[] {
   );
 }
 
-function formatDistance(distanceMeters?: number): string {
-  if (typeof distanceMeters !== 'number') return '';
-  if (distanceMeters < 1000) return `${Math.round(distanceMeters)} m`;
-  return `${(distanceMeters / 1000).toFixed(1)} Km`;
+function formatDistance(distanceMeters?: number): string {  // Formats distance in meters to a more readable string in meters or kilometers depending on the value 
+  if (typeof distanceMeters !== 'number') return '';    
+  if (distanceMeters < 1000) return `${Math.round(distanceMeters)} m`;   //   500 → "500 m"  1500 → "1.5 Km"
+  return `${(distanceMeters / 1000).toFixed(1)} Km`;  // if distance is less than 1000m, show in meters rounded to nearest whole number, otherwise show in kilometers with one decimal place
 }
 
-function distanceBetweenMeters(
-  from: { latitude: number; longitude: number },
-  to: { latitude: number; longitude: number },
+function distanceBetweenMeters(            // Haversine formula implementation to calculate distance between two lat/lon points in meters 
+  from: { latitude: number; longitude: number },    
+  to: { latitude: number; longitude: number },      //used for clustering and distance calculations when user location is available
 ): number {
-  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const toRadians = (value: number) => (value * Math.PI) / 180;    
   const earthRadiusMeters = 6371000;
 
   const dLat = toRadians(to.latitude - from.latitude);
@@ -99,7 +99,7 @@ function distanceBetweenMeters(
   return earthRadiusMeters * c;
 }
 
-type ClusteredMarker = {
+type ClusteredMarker = {  
   key: string;
   latitude: number;
   longitude: number;
@@ -107,11 +107,11 @@ type ClusteredMarker = {
   places: NearbyPlace[];
 };
 
-type MarkerRenderItem =
+type MarkerRenderItem =  // Defines the type for items that can be rendered as markers on the map, which can be either individual places or clusters of places
   | { kind: 'place'; place: NearbyPlace }
   | { kind: 'cluster'; cluster: ClusteredMarker };
 
-function buildClusteredMarkers(
+function buildClusteredMarkers(  // Clusters nearby places into groups based on proximity and returns an array of markers to render (either individual places or clusters)
   sourcePlaces: NearbyPlace[],
   region: Region,
 ): MarkerRenderItem[] {
@@ -695,7 +695,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
         <MapView
           ref={mapRef}
           style={styles.map}
-          initialRegion={FALLBACK_REGION}
+          initialRegion={FALLBACK_REGION}           // l region illi ta7il minha l map ki ta7il lapp  willi mawjouda il position mte3ha fil callback region
           onRegionChangeComplete={onRegionChangeComplete}
           onPress={() => setSelectedPlaceId(null)}
           showsUserLocation

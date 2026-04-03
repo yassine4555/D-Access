@@ -1,26 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { placesApi } from '../../services/api';
 
 export default function DiscoveryScreen() {
-    const [location, setLocation] = useState<Location.LocationObject | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [places, setPlaces] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         (async () => {
-            let { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                setErrorMsg('Permission to access location was denied');
-                return;
-            }
+            try {
+                let { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                    setErrorMsg('Permission to access location was denied');
+                    setLoading(false);
+                    return;
+                }
 
-            let location = await Location.getCurrentPositionAsync({});
-            setLocation(location);
-            fetchNearbyPlaces(location.coords.latitude, location.coords.longitude);
+                let currentLocation = await Location.getCurrentPositionAsync({});
+                fetchNearbyPlaces(currentLocation.coords.latitude, currentLocation.coords.longitude);
+            } catch (error) {
+                console.error(error);
+                setErrorMsg('Unable to retrieve your location');
+                setLoading(false);
+            }
         })();
     }, []);
 
@@ -40,39 +44,11 @@ export default function DiscoveryScreen() {
 
     return (
         <View style={styles.container}>
-            {location ? (
-                <MapView
-                    style={styles.map}
-                    initialRegion={{
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
-                        latitudeDelta: 0.0922,
-                        longitudeDelta: 0.0421,
-                    }}
-                    showsUserLocation={true}
-                >
-                    {places.map((place, index) => (
-                        <Marker
-                            key={place._id || index}
-                            coordinate={{
-                                latitude: place.location.coordinates[1],
-                                longitude: place.location.coordinates[0],
-                            }}
-                            title={place.name}
-                            description={place.description}
-                        />
-                    ))}
-                </MapView>
-            ) : (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#0000ff" />
-                    <Text style={styles.loadingText}>{errorMsg || 'Getting Location...'}</Text>
-                </View>
-            )}
-
             <View style={styles.listContainer}>
                 <Text style={styles.listTitle}>Lieux à proximité</Text>
-                {loading ? (
+                {errorMsg ? (
+                    <Text style={styles.emptyText}>{errorMsg}</Text>
+                ) : loading ? (
                     <ActivityIndicator />
                 ) : places.length === 0 ? (
                     <Text style={styles.emptyText}>Aucun lieu trouvé à proximité.</Text>
@@ -92,19 +68,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#ffffff',
-    },
-    map: {
-        width: '100%',
-        height: '66%',
-    },
-    loadingContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    loadingText: {
-        marginTop: 8,
-        color: '#6b7280',
     },
     listContainer: {
         flex: 1,
