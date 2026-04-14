@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+    Alert,
     View,
     Text,
     ScrollView,
@@ -29,9 +30,16 @@ const MOCK_PHOTOS = [
     'https://images.unsplash.com/photo-1453614512568-c4024d13c247?w=200&h=200&fit=crop',
 ];
 
-export default function PublicPlaceDetailsScreen({ navigation }: HomeScreenProps<'PublicPlaceDetails'>) {
+export default function PublicPlaceDetailsScreen({ navigation, route }: HomeScreenProps<'PublicPlaceDetails'>) {
+    const place = route?.params?.place;
+
     const handleReportPress = () => {
-        if (openAddReportOnMap()) {
+        if (!place?.id) {
+            Alert.alert('Report unavailable', 'This screen does not have a place id yet. Open a place details card from the map first.');
+            return;
+        }
+
+        if (openAddReportOnMap(place)) {
             return;
         }
         navigation.navigate('MainTabs');

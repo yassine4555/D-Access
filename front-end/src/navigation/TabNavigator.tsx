@@ -111,6 +111,7 @@ export default function TabNavigator() {
     const [showSuccessPopup, setShowSuccessPopup] = useState(false);
     const [showLocationPopup, setShowLocationPopup] = useState(false);
     const [showExitPopup, setShowExitPopup] = useState(false);
+    const [hasHandledLocationPrompt, setHasHandledLocationPrompt] = useState(false);
 
     useEffect(() => {
         if (!lastAuthAction) return;
@@ -135,6 +136,7 @@ export default function TabNavigator() {
 
             if (showLocationPopup) {
                 setShowLocationPopup(false);
+                setHasHandledLocationPrompt(true);
                 return true;
             }
 
@@ -157,6 +159,29 @@ export default function TabNavigator() {
 
         return () => subscription.remove();
     }, [showExitPopup, showLocationPopup, showSuccessPopup]);
+
+    useEffect(() => {
+        if (hasHandledLocationPrompt || showSuccessPopup || showLocationPopup) {
+            return;
+        }
+
+        let mounted = true;
+        const maybePromptLocation = async () => {
+            const permission = await Location.getForegroundPermissionsAsync();
+            if (!mounted) {
+                return;
+            }
+
+            if (permission.status !== 'granted') {
+                setShowLocationPopup(true);
+            }
+        };
+
+        void maybePromptLocation();
+        return () => {
+            mounted = false;
+        };
+    }, [hasHandledLocationPrompt, showLocationPopup, showSuccessPopup]);
 
     const successContent = useMemo(() => {
         if (isGuestEntry) {
@@ -181,18 +206,28 @@ export default function TabNavigator() {
         };
     }, [lastAuthAction, isGuestEntry]);
 
-    const openLocationPopup = () => {
+    const openLocationPopup = async () => {
         setShowSuccessPopup(false);
+
+        const permission = await Location.getForegroundPermissionsAsync();
+        if (permission.status === 'granted') {
+            closeFlow();
+            return;
+        }
+
         setShowLocationPopup(true);
     };
 
     const closeFlow = () => {
         setShowLocationPopup(false);
+        setHasHandledLocationPrompt(true);
         clearLastAuthAction();
         clearGuestEntry();
     };
 
     const handleAllowLocation = async () => {
+        // Close custom popup first so it does not stack with the OS prompt.
+        setShowLocationPopup(false);
         try {
             await Location.requestForegroundPermissionsAsync();
         } finally {
@@ -240,16 +275,18 @@ export default function TabNavigator() {
             </Tab.Navigator>
 
             <AuthStatusPopup
-                visible={showSuccessPopup}
+                visible={showSuccessPopup && !showLocationPopup}
                 variant="verified"
                 title={successContent.title}
                 message={successContent.message}
                 primaryLabel={successContent.primaryLabel}
-                onPrimaryPress={openLocationPopup}
+                onPrimaryPress={() => {
+                    void openLocationPopup();
+                }}
             />
 
             <AuthStatusPopup
-                visible={showLocationPopup}
+                visible={showLocationPopup && !showSuccessPopup}
                 variant="location"
                 title="Enable Precise Location"
                 message="Allow maps to access your location while you use the app?"

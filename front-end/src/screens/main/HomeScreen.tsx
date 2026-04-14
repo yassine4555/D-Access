@@ -241,18 +241,17 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                                 ) : (
                                     places.map((place) => {
                                         const wheelchairValue = place.accessibility?.wheelchair ?? 'unknown';
+                                        const placePreview = {
+                                            id: place.sourceId,
+                                            name: place.name || 'Unnamed',
+                                            distance: formatDistance(place.distanceMeters),
+                                        };
 
                                         return (
                                             <TouchableOpacity
                                                 key={place.sourceId}
                                                 style={styles.placeCard}
-                                                onPress={() => navigation.navigate('PlaceDetails', {
-                                                    place: {
-                                                        id: place.sourceId,
-                                                        name: place.name || 'Unnamed',
-                                                        distance: formatDistance(place.distanceMeters)
-                                                    }
-                                                })}
+                                                onPress={() => navigation.navigate('PlaceDetails', { place: placePreview })}
                                             >
                                                 <View style={styles.placeImageWrapper}>
                                                     <Image
@@ -275,13 +274,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
                                                 </View>
                                                 <TouchableOpacity
                                                     style={styles.directionsBtn}
-                                                    onPress={() => navigation.navigate('PlaceDetails', {
-                                                        place: {
-                                                            id: place.sourceId,
-                                                            name: place.name || 'Unnamed',
-                                                            distance: formatDistance(place.distanceMeters)
-                                                        }
-                                                    })}
+                                                    onPress={() => navigation.navigate('PlaceDetails', { place: placePreview })}  // previous  onPress={() => navigation.navigate('PublicPlaceDetails', { place: placePreview })}
                                                 >
                                                     <Text style={styles.directionsBtnText}>View Details  ›</Text>
                                                 </TouchableOpacity>

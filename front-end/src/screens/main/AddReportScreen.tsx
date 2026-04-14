@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import {
+    ActivityIndicator,
+    Alert,
     View,
     Text,
     ScrollView,
@@ -13,7 +15,9 @@ import { BackIcon } from '../../components/icons/BackIcon';
 import { MapScreenProps } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { AuthRequiredPopup } from '../../components/common/AuthRequiredPopup';
+import { ReportSubmittedPopup } from '../../components/common/ReportSubmittedPopup';
 import { pushLoginOnRoot } from '../../navigation/navigationRef';
+import { placesApi } from '../../services/api';
 
 type ReportType = 'incorrect' | 'elevator' | 'ramp' | 'parking' | 'closed' | 'other' | null;
 
@@ -56,10 +60,54 @@ const REPORT_OPTIONS = [
     },
 ];
 
-export default function AddReportScreen({ navigation }: MapScreenProps<'AddReport'>) {
+export default function AddReportScreen({ navigation, route }: MapScreenProps<'AddReport'>) {
     const { isAuthenticated } = useAuth();
     const [selectedReport, setSelectedReport] = useState<ReportType>(null);
     const [description, setDescription] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showSubmittedPopup, setShowSubmittedPopup] = useState(false);
+
+    const place = route?.params?.place;
+    const placeId = place?.id;
+
+    const issueTypeMap: Record<Exclude<ReportType, null>, 'incorrect_info' | 'elevator_out_of_order' | 'ramp_blocked' | 'parking_issue' | 'place_closed' | 'other'> = {
+        incorrect: 'incorrect_info',
+        elevator: 'elevator_out_of_order',
+        ramp: 'ramp_blocked',
+        parking: 'parking_issue',
+        closed: 'place_closed',
+        other: 'other',
+    };
+
+    const handleSubmit = async () => {
+        if (!placeId) {
+            Alert.alert('Cannot submit', 'Missing place information for this report.');
+            return;
+        }
+
+        if (!selectedReport) {
+            Alert.alert('Select report type', 'Please choose the issue type before submitting.');
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+            await placesApi.createReport(placeId, {
+                issueType: issueTypeMap[selectedReport],
+                description: description.trim() || undefined,
+            });
+            setShowSubmittedPopup(true);
+        } catch (error: any) {
+            const message =
+                error?.response?.data?.message ||
+                error?.message ||
+                'Failed to submit report. Please try again.';
+
+            Alert.alert('Submission failed', Array.isArray(message) ? message[0] : message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     const handleContinueAsGuest = () => {
         if (navigation.canGoBack()) {
@@ -74,6 +122,14 @@ export default function AddReportScreen({ navigation }: MapScreenProps<'AddRepor
             return;
         }
         navigation.navigate('Login');
+    };
+
+    const handleCloseSubmittedPopup = () => {
+        setShowSubmittedPopup(false);
+        navigation.navigate('PlaceDetails', {
+            place,
+            refreshToken: Date.now(),
+        });
     };
 
     if (!isAuthenticated) {
@@ -94,13 +150,18 @@ export default function AddReportScreen({ navigation }: MapScreenProps<'AddRepor
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" />
 
+            <ReportSubmittedPopup
+                visible={showSubmittedPopup}
+                onClose={handleCloseSubmittedPopup}
+            />
+
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.floatingButton}>
                     <BackIcon color={colors.gray900} />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.submitBtn}>
-                    <Text style={styles.submitBtnText}>Submit</Text>
+                <TouchableOpacity style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]} onPress={() => void handleSubmit()} disabled={isSubmitting}>
+                    {isSubmitting ? <ActivityIndicator color="#F4F3F5" /> : <Text style={styles.submitBtnText}>Submit</Text>}
                 </TouchableOpacity>
             </View>
                 
@@ -126,8 +187,8 @@ export default function AddReportScreen({ navigation }: MapScreenProps<'AddRepor
                     </TouchableOpacity>
                 </View>
              
-                <Text style={styles.addressText}>123 Main St, San Francisco, CA 94103</Text>
-                <Text style={styles.distanceText}>350 ft from your location</Text>
+                <Text style={styles.addressText}>{place?.name || 'Selected place'}</Text>
+                <Text style={styles.distanceText}>{placeId ? `Place ID: ${placeId}` : 'Missing place id'}</Text>
 
                 {/* Report Options */}
                 {REPORT_OPTIONS.map((option) => (
@@ -206,6 +267,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 28,
         paddingVertical: 10,
         borderRadius: 10,
+    },
+    submitBtnDisabled: {
+        opacity: 0.7,
     },
     submitBtnText: {
         color: '#F4F3F5',

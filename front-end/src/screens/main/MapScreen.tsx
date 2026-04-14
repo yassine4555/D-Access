@@ -302,6 +302,18 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
     longitude: number;
   } | null>(null);
 
+  const selectedPlaceForReport = useMemo(() => {
+    const selected = places.find((place) => place.sourceId === selectedPlaceId);
+    if (!selected) {
+      return undefined;
+    }
+
+    return {
+      id: selected.sourceId,
+      name: selected.name,
+    };
+  }, [places, selectedPlaceId]);
+
   const mapRef = useRef<MapView | null>(null);
   const searchRadiusRef = useRef<number>(DEFAULT_RADIUS_METERS);
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -774,7 +786,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
         {/* Report button */}
         <TouchableOpacity
           style={styles.reportBtn}
-          onPress={() => navigation.navigate('AddReport')}
+          onPress={() => navigation.navigate('AddReport', { place: selectedPlaceForReport })}
         >
           <Text style={styles.reportBtnText}>+ Report</Text>
         </TouchableOpacity>

@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { PlacesModule } from './places/places.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PlacesModule } from './places/places.module';
     UsersModule,
     AuthModule,
     PlacesModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [

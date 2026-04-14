@@ -81,5 +81,36 @@ export const placeDetailsSchema = z.object({
   updatedAt: z.string().optional(),
 });
 
+export const reportIssueTypeSchema = z.enum([
+  'elevator_out_of_order',
+  'ramp_blocked',
+  'parking_issue',
+  'place_closed',
+  'incorrect_info',
+  'other',
+]);
+
+export const placeReportSchema = z.object({
+  id: z.string(),
+  issueType: reportIssueTypeSchema,
+  description: z.string().optional(),
+  status: z.enum(['pending', 'verified', 'rejected', 'spam']),
+  createdAt: z.string(),
+  user: z
+    .object({
+      id: z.string().optional(),
+      firstName: z.string().optional(),
+      lastName: z.string().optional(),
+      email: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+
+export const placeReportsResponseSchema = z.object({
+  data: z.array(placeReportSchema),
+});
+
 export type NearbyPlaceResponse = z.infer<typeof nearbyPlacesResponseSchema>;
 export type PlaceDetailsResponse = z.infer<typeof placeDetailsSchema>;
+export type PlaceReportResponse = z.infer<typeof placeReportsResponseSchema>;

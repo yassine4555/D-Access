@@ -38,3 +38,23 @@ export type PlaceDetails = {
   tagsSummary?: PlaceTagsSummary;
   updatedAt?: string;
 };
+
+export type PlaceReport = {
+  id: string;
+  issueType:
+    | 'elevator_out_of_order'
+    | 'ramp_blocked'
+    | 'parking_issue'
+    | 'place_closed'
+    | 'incorrect_info'
+    | 'other';
+  description?: string;
+  status: 'pending' | 'verified' | 'rejected' | 'spam';
+  createdAt: string;
+  user?: {
+    id?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+  } | null;
+};

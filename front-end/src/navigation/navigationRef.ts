@@ -1,5 +1,5 @@
 import { CommonActions, createNavigationContainerRef, StackActions } from '@react-navigation/native';
-import { RootStackParamList } from '../types/navigation';
+import { PlacePreview, RootStackParamList } from '../types/navigation';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
@@ -31,7 +31,7 @@ export function resetToWelcomeOnRoot(): boolean {
   return true;
 }
 
-export function openAddReportOnMap(): boolean {
+export function openAddReportOnMap(place?: PlacePreview): boolean {
   if (!navigationRef.isReady()) {
     return false;
   }
@@ -43,6 +43,9 @@ export function openAddReportOnMap(): boolean {
         screen: 'Map',
         params: {
           screen: 'AddReport',
+          params: {
+            place,
+          },
         },
       },
     }),

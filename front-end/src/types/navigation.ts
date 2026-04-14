@@ -40,16 +40,20 @@ export type TabParamList = {
 
 export type HomeStackParamList = {
   HomeMain: undefined;
-  PlaceDetails: { place?: PlacePreview } | undefined;
-  PublicPlaceDetails: undefined;
+  PlaceDetails: { place?: PlacePreview; refreshToken?: number } | undefined;
+  PublicPlaceDetails: { place: PlacePreview };
   WriteReview: { place?: PlacePreview } | undefined;
 };
 
 export type MapStackParamList = {
   MapMain: undefined;
-  PlaceDetails: { place?: PlacePreview } | undefined;
+  PlaceDetails: { place?: PlacePreview; refreshToken?: number } | undefined;
   WriteReview: { place?: PlacePreview } | undefined;
-  AddReport: undefined;
+  AddReport:
+    | {
+        place?: PlacePreview;
+      }
+    | undefined;
   ReportDetails: { report?: ReportPreview } | undefined;
 };
 
@@ -60,7 +64,7 @@ export type SettingsStackParamList = {
   Language: undefined;
   AccessibilitySettings: undefined;
   ChangePassword: undefined;
-  PlaceDetails: { place?: PlacePreview } | undefined;
+  PlaceDetails: { place?: PlacePreview; refreshToken?: number } | undefined;
   WriteReview: { place?: PlacePreview } | undefined;
 };
 

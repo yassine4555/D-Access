@@ -17,7 +17,7 @@ import { BackIcon } from '../../components/icons/BackIcon';
 import { PlaceDetailsScreenProps } from '../../types/navigation';
 import { openAddReportOnMap } from '../../navigation/navigationRef';
 import { placesApi } from '../../services/api';
-import { PlaceDetails, WheelchairAccessibility } from '../../types/place';
+import { PlaceDetails, PlaceReport, WheelchairAccessibility } from '../../types/place';
 
 const { width } = Dimensions.get('window');
 
@@ -76,9 +76,11 @@ function wheelchairPresentation(value: WheelchairAccessibility): {
 
 export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsScreenProps) {
     const placePreview = route?.params?.place;
+    const refreshToken = route?.params?.refreshToken;
     const sourceId = placePreview?.id;
 
     const [placeDetails, setPlaceDetails] = useState<PlaceDetails | null>(null);
+    const [reports, setReports] = useState<PlaceReport[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorText, setErrorText] = useState<string | null>(null);
 
@@ -94,12 +96,18 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
         setErrorText(null);
 
         try {
-            const response = await placesApi.getById(sourceId);
-            setPlaceDetails(response.data as PlaceDetails);
+            const [detailsResponse, reportsResponse] = await Promise.all([
+                placesApi.getById(sourceId),
+                placesApi.getReports(sourceId, 10),
+            ]);
+
+            setPlaceDetails(detailsResponse.data as PlaceDetails);
+            setReports(reportsResponse.data.data as PlaceReport[]);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unable to load place details right now.';
             setErrorText(message);
             setPlaceDetails(null);
+            setReports([]);
         } finally {
             setIsLoading(false);
         }
@@ -107,13 +115,36 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
 
     useEffect(() => {
         void loadPlaceDetails();
-    }, [loadPlaceDetails]);
+    }, [loadPlaceDetails, refreshToken]);
 
     const handleReportPress = () => {
-        if (openAddReportOnMap()) {
+        const reportPlace = {
+            id: placeDetails?.sourceId || placePreview?.id || '',
+            name: placeDetails?.name || placePreview?.name,
+            image: placePreview?.image,
+        };
+
+        if (!reportPlace.id) {
+            return;
+        }
+
+        if (openAddReportOnMap(reportPlace)) {
             return;
         }
         navigation.navigate('MainTabs');
+    };
+
+    const issueTypeLabel = (issueType: PlaceReport['issueType']) => {
+        const labels: Record<PlaceReport['issueType'], string> = {
+            elevator_out_of_order: 'Elevator Out of Order',
+            ramp_blocked: 'Ramp Blocked',
+            parking_issue: 'Parking Issue',
+            place_closed: 'Place Closed',
+            incorrect_info: 'Incorrect Info',
+            other: 'Other',
+        };
+
+        return labels[issueType];
     };
 
     const wheelchair = normalizeWheelchair(placeDetails?.accessibility?.wheelchair);
@@ -247,6 +278,23 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
                     </View>
                     <Text style={styles.reportSubmitted}>Source ID: {placeDetails?.sourceId || placePreview?.id || 'N/A'}</Text>
                     <Text style={styles.reportMeta}>Last update: {placeDetails?.updatedAt ? new Date(placeDetails.updatedAt).toLocaleDateString() : 'Unknown'}</Text>
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Recent Reports</Text>
+                    {reports.length === 0 ? (
+                        <Text style={styles.reviewBody}>No reports yet for this place.</Text>
+                    ) : (
+                        reports.slice(0, 3).map((report) => (
+                            <View key={report.id} style={styles.reviewCard}>
+                                <Text style={styles.reviewTitle}>{issueTypeLabel(report.issueType)}</Text>
+                                <Text style={styles.reviewBody}>{report.description || 'No additional details provided.'}</Text>
+                                <Text style={styles.reviewDate}>
+                                    {new Date(report.createdAt).toLocaleString()}
+                                </Text>
+                            </View>
+                        ))
+                    )}
                 </View>
 
                 <View style={styles.section}>

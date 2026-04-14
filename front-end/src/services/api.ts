@@ -6,7 +6,11 @@ import {
     authTokenPayloadSchema,
     authUserSchema,
 } from '../schemas/authSchemas';
-import { nearbyPlacesResponseSchema, placeDetailsSchema } from '../schemas/placeSchemas';
+import {
+    nearbyPlacesResponseSchema,
+    placeDetailsSchema,
+    placeReportsResponseSchema,
+} from '../schemas/placeSchemas';
 
 const BASE_URL = getApiBaseUrl();
 const BASE_URL_CANDIDATES = getApiBaseUrlCandidates();
@@ -197,6 +201,34 @@ export const placesApi = {
         }
 
         throw lastError;
+    },
+    createReport: async (
+        sourceId: string,
+        payload: {
+            issueType:
+                | 'elevator_out_of_order'
+                | 'ramp_blocked'
+                | 'parking_issue'
+                | 'place_closed'
+                | 'incorrect_info'
+                | 'other';
+            description?: string;
+        },
+    ) => {
+        const response = await api.post(`/places/${encodeURIComponent(sourceId)}/reports`, payload);
+        return response;
+    },
+    getReports: async (sourceId: string, limit = 20) => {
+        const response = await api.get(`/places/${encodeURIComponent(sourceId)}/reports?limit=${limit}`);
+        const parsed = placeReportsResponseSchema.safeParse(response.data);
+
+        if (!parsed.success) {
+            console.error('[placesApi.getReports] Invalid response payload:', parsed.error.flatten());
+            throw new Error('Invalid place reports response from server');
+        }
+
+        response.data = parsed.data;
+        return response;
     },
 };
 
