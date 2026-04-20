@@ -10,7 +10,11 @@ import { Model, Types } from 'mongoose';
 import { Place, PlaceDocument } from '../places/schemas/place.schema';
 import { CreatePlaceReportDto } from './dto/create-place-report.dto';
 import { GetAdminReportsDto } from './dto/get-admin-reports.dto';
-import { PlaceReport, PlaceReportDocument, ReportStatus } from './schemas/place-report.schema';
+import {
+  PlaceReport,
+  PlaceReportDocument,
+  ReportStatus,
+} from './schemas/place-report.schema';
 
 @Injectable()
 export class ReportsService {
@@ -27,7 +31,10 @@ export class ReportsService {
     dto: CreatePlaceReportDto,
   ) {
     const place = await this.findPlaceOrThrow(placeIdentifier);
-    const reporterId = this.toObjectIdOrThrow(userId, 'Invalid user id in token.');
+    const reporterId = this.toObjectIdOrThrow(
+      userId,
+      'Invalid user id in token.',
+    );
 
     await this.enforceRateLimit(reporterId);
 
@@ -50,6 +57,9 @@ export class ReportsService {
     }
 
     const description = (dto.description ?? '').trim();
+    const { imageData, imageContentType } = this.parseImageDataUrl(
+      dto.imageBase64,
+    );
     const spamScore = this.computeSpamScore(description);
 
     const report = await this.reportModel.create({
@@ -57,6 +67,8 @@ export class ReportsService {
       placeId: place._id,
       issueType: dto.issueType,
       description,
+      imageData,
+      imageContentType,
       spamScore,
       confidenceScore: Math.max(0, 100 - spamScore),
       status: spamScore >= 80 ? 'spam' : 'pending',
@@ -67,6 +79,7 @@ export class ReportsService {
       placeId: place.sourceId,
       issueType: report.issueType,
       description: report.description,
+      imageUrl: this.toDataUrl(report.imageData, report.imageContentType),
       status: report.status,
       spamScore: report.spamScore,
       createdAt: report.createdAt,
@@ -91,6 +104,7 @@ export class ReportsService {
         id: report._id.toString(),
         issueType: report.issueType,
         description: report.description,
+        imageUrl: this.toDataUrl(report.imageData, report.imageContentType),
         status: report.status,
         createdAt: report.createdAt,
         user: this.mapReporter(report.userId),
@@ -140,6 +154,7 @@ export class ReportsService {
         id: report._id.toString(),
         issueType: report.issueType,
         description: report.description,
+        imageUrl: this.toDataUrl(report.imageData, report.imageContentType),
         status: report.status,
         spamScore: report.spamScore,
         confidenceScore: report.confidenceScore,
@@ -236,7 +251,10 @@ export class ReportsService {
     return place;
   }
 
-  private toObjectIdOrThrow(value: string, errorMessage: string): Types.ObjectId {
+  private toObjectIdOrThrow(
+    value: string,
+    errorMessage: string,
+  ): Types.ObjectId {
     if (!Types.ObjectId.isValid(value)) {
       throw new BadRequestException(errorMessage);
     }
@@ -251,10 +269,14 @@ export class ReportsService {
       .exec();
 
     if (recentCount >= 5) {
-      throw new HttpException({
-        code: 'REPORT_RATE_LIMIT',
-        message: 'Too many reports submitted in a short period. Try again soon.',
-      }, HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        {
+          code: 'REPORT_RATE_LIMIT',
+          message:
+            'Too many reports submitted in a short period. Try again soon.',
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
   }
 
@@ -296,7 +318,7 @@ export class ReportsService {
 
     const record = user as Record<string, unknown>;
     return {
-      id: String(record._id ?? ''),
+      id: this.toSafeId(record._id),
       firstName: typeof record.firstName === 'string' ? record.firstName : '',
       lastName: typeof record.lastName === 'string' ? record.lastName : '',
       email: typeof record.email === 'string' ? record.email : undefined,
@@ -310,9 +332,64 @@ export class ReportsService {
 
     const record = place as Record<string, unknown>;
     return {
-      id: String(record._id ?? ''),
+      id: this.toSafeId(record._id),
       sourceId: typeof record.sourceId === 'string' ? record.sourceId : '',
       name: typeof record.name === 'string' ? record.name : '',
     };
+  }
+
+  private parseImageDataUrl(imageBase64?: string): {
+    imageData?: Buffer;
+    imageContentType?: string;
+  } {
+    if (!imageBase64) {
+      return {};
+    }
+
+    const value = imageBase64.trim();
+    const match =
+      /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(value);
+
+    if (!match) {
+      throw new BadRequestException(
+        'Invalid image format. Expected a base64 image data URL.',
+      );
+    }
+
+    const [, imageContentType, encodedData] = match;
+    const imageData = Buffer.from(encodedData, 'base64');
+
+    if (imageData.length === 0) {
+      throw new BadRequestException('Image payload is empty.');
+    }
+
+    if (imageData.length > 5 * 1024 * 1024) {
+      throw new BadRequestException('Image must be 5MB or smaller.');
+    }
+
+    return { imageData, imageContentType };
+  }
+
+  private toSafeId(value: unknown): string {
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    if (value instanceof Types.ObjectId) {
+      return value.toHexString();
+    }
+
+    return '';
+  }
+
+  private toDataUrl(
+    imageData?: Buffer,
+    imageContentType?: string,
+  ): string | undefined {
+    if (!imageData || !imageContentType) {
+      return undefined;
+    }
+
+    return `data:${imageContentType};base64,${imageData.toString('base64')}`;
   }
 }

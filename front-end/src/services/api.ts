@@ -25,6 +25,23 @@ const api = axios.create({
     },
 });
 
+function resolveAssetUrl(url?: string): string | undefined {
+    if (!url) {
+        return undefined;
+    }
+
+    if (/^data:/i.test(url)) {
+        return url;
+    }
+
+    if (/^https?:\/\//i.test(url)) {
+        return url;
+    }
+
+    const base = api.defaults.baseURL ?? BASE_URL;
+    return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
 // Attach stored JWT to every request
 api.interceptors.request.use(async (config) => {
     const token = await SecureStore.getItemAsync('userToken');
@@ -213,9 +230,14 @@ export const placesApi = {
                 | 'incorrect_info'
                 | 'other';
             description?: string;
+            imageBase64?: string;
         },
     ) => {
-        const response = await api.post(`/places/${encodeURIComponent(sourceId)}/reports`, payload);
+        const response = await api.post(`/places/${encodeURIComponent(sourceId)}/reports`, {
+            issueType: payload.issueType,
+            description: payload.description,
+            imageBase64: payload.imageBase64,
+        });
         return response;
     },
     getReports: async (sourceId: string, limit = 20) => {
@@ -227,7 +249,13 @@ export const placesApi = {
             throw new Error('Invalid place reports response from server');
         }
 
-        response.data = parsed.data;
+        response.data = {
+            ...parsed.data,
+            data: parsed.data.data.map((report) => ({
+                ...report,
+                imageUrl: resolveAssetUrl(report.imageUrl),
+            })),
+        };
         return response;
     },
 };

@@ -94,6 +94,7 @@ export const placeReportSchema = z.object({
   id: z.string(),
   issueType: reportIssueTypeSchema,
   description: z.string().optional(),
+  imageUrl: z.string().optional(),
   status: z.enum(['pending', 'verified', 'rejected', 'spam']),
   createdAt: z.string(),
   user: z

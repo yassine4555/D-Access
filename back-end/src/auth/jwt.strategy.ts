@@ -36,13 +36,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         ? (user as any).toObject()
         : user;
 
-    const {
-      passwordHash,
-      resetTokenHash,
-      resetTokenExpiry,
-      __v,
-      ...safeUser
-    } = userObject as any;
+    const { passwordHash, resetTokenHash, resetTokenExpiry, __v, ...safeUser } =
+      userObject;
 
     return safeUser;
   }

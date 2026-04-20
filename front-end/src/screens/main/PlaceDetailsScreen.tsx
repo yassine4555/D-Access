@@ -287,6 +287,9 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
                     ) : (
                         reports.slice(0, 3).map((report) => (
                             <View key={report.id} style={styles.reviewCard}>
+                                {report.imageUrl ? (
+                                    <Image source={{ uri: report.imageUrl }} style={styles.reportImage} />
+                                ) : null}
                                 <Text style={styles.reviewTitle}>{issueTypeLabel(report.issueType)}</Text>
                                 <Text style={styles.reviewBody}>{report.description || 'No additional details provided.'}</Text>
                                 <Text style={styles.reviewDate}>
@@ -639,6 +642,13 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.gray100,
         marginBottom: 12,
+    },
+    reportImage: {
+        width: '100%',
+        height: 160,
+        borderRadius: 10,
+        marginBottom: 10,
+        backgroundColor: colors.gray100,
     },
     reviewAuthorRow: {
         flexDirection: 'row',

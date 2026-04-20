@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Image,
     View,
     Text,
     ScrollView,
@@ -10,6 +11,7 @@ import {
     StyleSheet,
     StatusBar,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../constants/colors';
 import { BackIcon } from '../../components/icons/BackIcon';
 import { MapScreenProps } from '../../types/navigation';
@@ -66,6 +68,8 @@ export default function AddReportScreen({ navigation, route }: MapScreenProps<'A
     const [description, setDescription] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showSubmittedPopup, setShowSubmittedPopup] = useState(false);
+    const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+    const [selectedImageBase64, setSelectedImageBase64] = useState<string | null>(null);
 
     const place = route?.params?.place;
     const placeId = place?.id;
@@ -95,6 +99,7 @@ export default function AddReportScreen({ navigation, route }: MapScreenProps<'A
             await placesApi.createReport(placeId, {
                 issueType: issueTypeMap[selectedReport],
                 description: description.trim() || undefined,
+                imageBase64: selectedImageBase64 || undefined,
             });
             setShowSubmittedPopup(true);
         } catch (error: any) {
@@ -122,6 +127,37 @@ export default function AddReportScreen({ navigation, route }: MapScreenProps<'A
             return;
         }
         navigation.navigate('Login');
+    };
+
+    const handlePickImage = async () => {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (!permission.granted) {
+            Alert.alert(
+                'Permission required',
+                'Please allow access to your photos to attach an image to the report.',
+            );
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'] as ImagePicker.MediaType[],
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.8,
+            base64: true,
+        });
+
+        if (!result.canceled) {
+            const asset = result.assets[0];
+            const uri = asset?.uri ?? null;
+            const mimeType = asset?.mimeType || 'image/jpeg';
+
+            setSelectedImageUri(uri);
+            setSelectedImageBase64(
+                asset?.base64 ? `data:${mimeType};base64,${asset.base64}` : null,
+            );
+        }
     };
 
     const handleCloseSubmittedPopup = () => {
@@ -227,9 +263,15 @@ export default function AddReportScreen({ navigation, route }: MapScreenProps<'A
 
                 {/* Photos */}
                 <Text style={styles.photosLabel}>Photos</Text>
-                <TouchableOpacity style={styles.photoUpload}>
-                    <Text style={styles.downloadIcon}>⬇</Text>
-                    <Text style={styles.photoUploadText}>Click or drop image</Text>
+                <TouchableOpacity style={styles.photoUpload} onPress={() => void handlePickImage()} activeOpacity={0.9}>
+                    {selectedImageUri ? (
+                        <Image source={{ uri: selectedImageUri }} style={styles.photoPreview} />
+                    ) : (
+                        <>
+                            <Text style={styles.downloadIcon}>⬇</Text>
+                            <Text style={styles.photoUploadText}>Tap to choose image from phone</Text>
+                        </>
+                    )}
                 </TouchableOpacity>
 
                 <View style={{ height: 40 }} />
@@ -465,5 +507,10 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#303030',
         fontFamily: 'Poppins',
+    },
+    photoPreview: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 10,
     },
 });
