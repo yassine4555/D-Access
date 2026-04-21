@@ -10,14 +10,14 @@ export class Accessibility {
     enum: ['yes', 'no', 'limited', 'unknown'],
     default: 'unknown',
   })
-  wheelchair: 'yes' | 'no' | 'limited' | 'unknown';
+  wheelchair!: 'yes' | 'no' | 'limited' | 'unknown';
 
   @Prop({
     type: String,
     enum: ['yes', 'no', 'unknown'],
     default: 'unknown',
   })
-  toiletsWheelchair: 'yes' | 'no' | 'unknown';
+  toiletsWheelchair!: 'yes' | 'no' | 'unknown';
 }
 
 const AccessibilitySchema = SchemaFactory.createForClass(Accessibility);
@@ -25,10 +25,10 @@ const AccessibilitySchema = SchemaFactory.createForClass(Accessibility);
 @Schema({ _id: false })
 export class GeoPoint {
   @Prop({ type: String, enum: ['Point'], default: 'Point', required: true })
-  type: 'Point';
+  type!: 'Point';
 
   @Prop({ type: [Number], required: true })
-  coordinates: [number, number];
+  coordinates!: [number, number];
 }
 
 const GeoPointSchema = SchemaFactory.createForClass(GeoPoint);
@@ -36,34 +36,34 @@ const GeoPointSchema = SchemaFactory.createForClass(GeoPoint);
 @Schema({ timestamps: false, collection: 'places' })
 export class Place {
   @Prop({ type: String, default: 'osm', required: true })
-  source: 'osm';
+  source!: 'osm';
 
   @Prop({ type: String, enum: ['node', 'way', 'relation'], required: true })
-  osmType: 'node' | 'way' | 'relation';
+  osmType!: 'node' | 'way' | 'relation';
 
   @Prop({ type: Number, required: true })
-  osmId: number;
+  osmId!: number;
 
   @Prop({ type: String, required: true, unique: true })
-  sourceId: string;
+  sourceId!: string;
 
   @Prop({ type: String, default: '' })
-  name: string;
+  name!: string;
 
   @Prop({ type: String, default: 'other', index: true })
-  category: string;
+  category!: string;
 
   @Prop({ type: GeoPointSchema, required: true })
-  location: GeoPoint;
+  location!: GeoPoint;
 
   @Prop({ type: MongooseSchema.Types.Mixed, default: {} })
-  tags: Record<string, string>;
+  tags!: Record<string, string>;
 
   @Prop({ type: AccessibilitySchema, default: () => ({}) })
-  accessibility: Accessibility;
+  accessibility!: Accessibility;
 
   @Prop({ type: Date, default: () => new Date() })
-  updatedAt: Date;
+  updatedAt!: Date;
 }
 
 export const PlaceSchema = SchemaFactory.createForClass(Place);

@@ -49,6 +49,7 @@ export type PlaceReport = {
     | 'incorrect_info'
     | 'other';
   description?: string;
+  imageUrl?: string;
   status: 'pending' | 'verified' | 'rejected' | 'spam';
   createdAt: string;
   user?: {

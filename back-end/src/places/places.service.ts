@@ -192,10 +192,7 @@ export class PlacesService {
   async getPlaceById(id: string): Promise<PlaceDetailsResponse> {
     const lookupQuery = Types.ObjectId.isValid(id)
       ? {
-          $or: [
-            { sourceId: id },
-            { _id: new Types.ObjectId(id) },
-          ],
+          $or: [{ sourceId: id }, { _id: new Types.ObjectId(id) }],
         }
       : { sourceId: id };
 
@@ -296,7 +293,10 @@ export class PlacesService {
     return 'unknown';
   }
 
-  private getTagValue(tags: Record<string, unknown>, key: string): string | undefined {
+  private getTagValue(
+    tags: Record<string, unknown>,
+    key: string,
+  ): string | undefined {
     const value = tags[key];
     if (typeof value !== 'string') {
       return undefined;

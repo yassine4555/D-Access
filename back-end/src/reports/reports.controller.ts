@@ -26,7 +26,9 @@ export class ReportsController {
 
   @UseGuards(JwtAuthGuard)
   @Post('places/:id/reports')
-  @ApiOperation({ summary: 'Create a report for a place (authenticated users)' })
+  @ApiOperation({
+    summary: 'Create a report for a place (authenticated users)',
+  })
   createReport(
     @Param('id') id: string,
     @CurrentUser() user: { _id: string },
@@ -37,7 +39,10 @@ export class ReportsController {
 
   @Get('places/:id/reports')
   @ApiOperation({ summary: 'Get recent reports for a place' })
-  getReportsForPlace(@Param('id') id: string, @Query() query: GetPlaceReportsDto) {
+  getReportsForPlace(
+    @Param('id') id: string,
+    @Query() query: GetPlaceReportsDto,
+  ) {
     return this.reportsService.getForPlace(id, query.limit ?? 20);
   }
 

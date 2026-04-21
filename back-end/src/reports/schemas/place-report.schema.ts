@@ -36,7 +36,18 @@ export class PlaceReport {
   @Prop({ type: String, trim: true, maxlength: 1000, default: '' })
   description!: string;
 
-  @Prop({ type: String, enum: REPORT_STATUSES, default: 'pending', index: true })
+  @Prop({ type: Buffer })
+  imageData?: Buffer;
+
+  @Prop({ type: String, trim: true, maxlength: 100 })
+  imageContentType?: string;
+
+  @Prop({
+    type: String,
+    enum: REPORT_STATUSES,
+    default: 'pending',
+    index: true,
+  })
   status!: ReportStatus;
 
   @Prop({ min: 0, max: 100, default: 0, index: true })

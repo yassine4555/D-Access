@@ -6,7 +6,14 @@ import {
 } from '@nestjs/common';
 import { APP_GUARD, Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { Role } from '../src/auth/enums/role.enum';
@@ -21,13 +28,11 @@ class MockJwtAuthGuard implements CanActivate {
     const authHeader = requestObj.headers?.authorization;
 
     if (!authHeader) {
-      return true;   // Allow unauthenticated access for testing purposes   fil check
+      return true; // Allow unauthenticated access for testing purposes   fil check
     }
 
     const headerRole = requestObj.headers?.['x-role'];
-    const roleValue = Array.isArray(headerRole)
-      ? headerRole[0]
-      : headerRole;
+    const roleValue = Array.isArray(headerRole) ? headerRole[0] : headerRole;
 
     requestObj.user = {
       _id: '507f1f77bcf86cd799439011',
@@ -112,7 +117,9 @@ describe('Reports endpoints (e2e)', () => {
   });
 
   it('GET /places/:id/reports should return report list', async () => {
-    reportsServiceMock.getForPlace.mockImplementation(async () => ({ data: [] }));
+    reportsServiceMock.getForPlace.mockImplementation(async () => ({
+      data: [],
+    }));
 
     await request(app.getHttpServer())
       .get('/places/osm%3Anode%3A123/reports?limit=10')
