@@ -1,39 +1,95 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-    View,
-    Text,
-    ScrollView,
-    TouchableOpacity,
-    TextInput,
+    ActivityIndicator,
     Image,
-    StyleSheet,
+    Linking,
+    RefreshControl,
+    ScrollView,
     StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { colors } from '../../constants/colors';
-import { shared, SPACING, RADIUS, FONT, SEMANTIC_COLORS } from '../../constants/sharedStyles';
+import { FONT, RADIUS, SPACING, shared } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
 import { SearchIcon } from '../../components/icons/searchIcon';
-import { MicrophoneIcon } from '../../components/icons/MicrophoneIcon';
+import { productsApi } from '../../services/api';
 import { TabScreenProps } from '../../types/navigation';
 
-const PRODUCTS = [
-    {
-        id: '1',
-        title: 'Wheelchair automation kit',
-        price: '3000',
-        description: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
-        image: 'https://images.unsplash.com/photo-1596524430615-b46475ddff6e?w=800&q=80',
-    },
-    {
-        id: '2',
-        title: 'Portable Accessibility Ramp',
-        price: '450',
-        description: 'Easy to carry and set up, this ramp provides instant access to steps and curbs for wheelchair users.',
-        image: 'https://images.unsplash.com/photo-1596524430615-b46475ddff6e?w=800&q=80', // Replace with relevant image
-    },
-];
+type Product = {
+    _id: string;
+    name: string;
+    price: number;
+    currency: string;
+    imageUrl: string;
+    shopUrl: string;
+    description?: string;
+    isActive: boolean;
+};
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+    TND: 'DT',
+};
 
 export default function MarketplaceScreen({ navigation }: TabScreenProps<'Marketplace'>) {
+    const [products, setProducts] = useState<Product[]>([]);
+    const [filtered, setFiltered] = useState<Product[]>([]);
+    const [query, setQuery] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchProducts = useCallback(async () => {
+        try {
+            setError(null);
+            const res = await productsApi.getAll();
+            const data: Product[] = Array.isArray(res.data) ? res.data : [];
+            setProducts(data);
+            setFiltered(data);
+        } catch (err) {
+            setError('Could not load products. Pull down to retry.');
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => { void fetchProducts(); }, [fetchProducts]);
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        void fetchProducts();
+    };
+
+    const onSearch = (text: string) => {
+        setQuery(text);
+        const lower = text.toLowerCase();
+        setFiltered(
+            products.filter(
+                (p) =>
+                    p.name.toLowerCase().includes(lower) ||
+                    (p.description ?? '').toLowerCase().includes(lower),
+            ),
+        );
+    };
+
+    const openShop = async (url: string) => {
+        try {
+            const supported = await Linking.canOpenURL(url);
+            if (supported) {
+                await Linking.openURL(url);
+            }
+        } catch {
+            // silently fail
+        }
+    };
+
     return (
         <View style={shared.container}>
             <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
@@ -47,47 +103,88 @@ export default function MarketplaceScreen({ navigation }: TabScreenProps<'Market
                 <View style={{ width: 44 }} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                {/* Search Bar */}
-                <View style={styles.searchBarContainer}>
-                    <View style={styles.searchBar}>
-                        <View style={styles.searchIconWrapper}>
-                            <SearchIcon color="#CAC9C9" />
-                        </View>
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder="Search"
-                            placeholderTextColor="#CAC9C9"
-                        />
-                        <TouchableOpacity style={styles.microphoneIconWrapper}>
-                            <MicrophoneIcon color="#CAC9C9" />
-                        </TouchableOpacity>
+            {/* Search */}
+            <View style={styles.searchBarContainer}>
+                <View style={styles.searchBar}>
+                    <View style={styles.searchIconWrapper}>
+                        <SearchIcon color="#CAC9C9" />
                     </View>
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search products…"
+                        placeholderTextColor="#CAC9C9"
+                        value={query}
+                        onChangeText={onSearch}
+                        returnKeyType="search"
+                    />
                 </View>
+            </View>
 
-                {/* Product List */}
-                {PRODUCTS.map((item) => (
-                    <View key={item.id} style={styles.productCard}>
-                        <Image source={{ uri: item.image }} style={styles.productImage} />
-                        <View style={styles.productInfo}>
-                            <View style={styles.titlePriceRow}>
-                                <Text style={styles.productTitle}>{item.title}</Text>
-                                <Text style={styles.productPrice}>$ {item.price}</Text>
-                            </View>
-                            <Text style={styles.productDescription} numberOfLines={3}>
-                                {item.description}
+            {loading ? (
+                <View style={styles.centered}>
+                    <ActivityIndicator size="large" color="#4AAFD9" />
+                </View>
+            ) : error ? (
+                <View style={styles.centered}>
+                    <Text style={styles.errorText}>{error}</Text>
+                    <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); void fetchProducts(); }}>
+                        <Text style={styles.retryBtnText}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.scrollContent}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4AAFD9" />
+                    }
+                >
+                    {filtered.length === 0 ? (
+                        <View style={styles.centered}>
+                            <Text style={styles.emptyText}>
+                                {query ? 'No products match your search.' : 'No products available yet.'}
                             </Text>
-
-                            <TouchableOpacity style={styles.actionButton}>
-                                <Text style={styles.actionButtonText}>View on Merchant Site</Text>
-                                <Text style={styles.chevron}>›</Text>
-                            </TouchableOpacity>
                         </View>
-                    </View>
-                ))}
-
-                <View style={shared.bottomSpacer} />
-            </ScrollView>
+                    ) : (
+                        filtered.map((item) => {
+                            const sym = CURRENCY_SYMBOLS[item.currency] ?? item.currency;
+                            return (
+                                <View key={item._id} style={styles.productCard}>
+                                    <Image
+                                        source={{ uri: item.imageUrl }}
+                                        style={styles.productImage}
+                                        resizeMode="cover"
+                                    />
+                                    <View style={styles.productInfo}>
+                                        <View style={styles.titlePriceRow}>
+                                            <Text style={styles.productTitle} numberOfLines={2}>
+                                                {item.name}
+                                            </Text>
+                                            <Text style={styles.productPrice}>
+                                                {sym} {Number(item.price).toFixed(2)}
+                                            </Text>
+                                        </View>
+                                        {item.description ? (
+                                            <Text style={styles.productDescription} numberOfLines={3}>
+                                                {item.description}
+                                            </Text>
+                                        ) : null}
+                                        <TouchableOpacity
+                                            style={styles.actionButton}
+                                            onPress={() => void openShop(item.shopUrl)}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Text style={styles.actionButtonText}>View on Merchant Site</Text>
+                                            <Text style={styles.chevron}>›</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            );
+                        })
+                    )}
+                    <View style={shared.bottomSpacer} />
+                </ScrollView>
+            )}
         </View>
     );
 }
@@ -101,12 +198,6 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
         paddingHorizontal: 16,
         backgroundColor: colors.white,
-    },
-    backButton: {
-        width: 44,
-        height: 44,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     floatingButton: {
         backgroundColor: '#fff',
@@ -123,22 +214,22 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: colors.gray900,
     },
-    scrollContent: {
-        paddingTop: SPACING.md,
-    },
     searchBarContainer: {
         paddingHorizontal: SPACING.lg,
-        marginBottom: SPACING.lg,
+        paddingVertical: SPACING.md,
+        backgroundColor: colors.white,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
     },
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.white,
+        backgroundColor: '#F7F7F7',
         borderRadius: RADIUS.lg,
         borderWidth: 1,
         borderColor: '#DFDEDE',
         paddingHorizontal: 16,
-        paddingVertical: 14,
+        paddingVertical: 12,
         gap: 10,
     },
     searchIconWrapper: {
@@ -147,18 +238,44 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    microphoneIconWrapper: {
-        width: 24,
-        height: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
     searchInput: {
         flex: 1,
         fontSize: 14,
         color: colors.gray900,
         paddingVertical: 0,
-        fontFamily: 'Encode Sans',
+    },
+    scrollContent: {
+        paddingTop: SPACING.md,
+        paddingBottom: 24,
+    },
+    centered: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 32,
+        paddingTop: 60,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#9CA3AF',
+        textAlign: 'center',
+    },
+    errorText: {
+        fontSize: 14,
+        color: '#EF4444',
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    retryBtn: {
+        backgroundColor: '#4AAFD9',
+        paddingHorizontal: 24,
+        paddingVertical: 10,
+        borderRadius: 8,
+    },
+    retryBtnText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 14,
     },
     productCard: {
         backgroundColor: colors.white,
@@ -167,15 +284,14 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.xl,
         overflow: 'hidden',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.1,
-        shadowRadius: 16,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 3,
     },
     productImage: {
         width: '100%',
         height: 200,
-        resizeMode: 'cover',
     },
     productInfo: {
         padding: 16,
@@ -185,30 +301,27 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: 8,
+        gap: 8,
     },
     productTitle: {
         flex: 1,
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '700',
         color: colors.gray900,
-        lineHeight: 25,
-        marginRight: SPACING.md,
-        fontFamily: 'Poppins',
+        lineHeight: 24,
     },
     productPrice: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '700',
         color: '#082F49',
-        lineHeight: 25,
-        fontFamily: 'Poppins',
+        lineHeight: 24,
+        flexShrink: 0,
     },
     productDescription: {
         fontSize: 12,
-        fontWeight: '400',
-        color: colors.gray900,
+        color: '#6B7280',
         lineHeight: 18,
         marginBottom: 16,
-        fontFamily: 'Poppins',
     },
     actionButton: {
         flexDirection: 'row',
@@ -222,13 +335,11 @@ const styles = StyleSheet.create({
     actionButtonText: {
         color: colors.white,
         fontWeight: '600',
-        fontSize: 16,
+        fontSize: 15,
         marginRight: 8,
-        fontFamily: 'Manrope',
     },
     chevron: {
         color: colors.white,
         fontSize: 20,
-        fontWeight: '400',
     },
 });

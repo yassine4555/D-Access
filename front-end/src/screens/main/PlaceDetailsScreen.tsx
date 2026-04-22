@@ -167,7 +167,8 @@ export default function PlaceDetailsScreen({ navigation, route }: PlaceDetailsSc
                 ? `maps://?daddr=${lat},${lon}&q=${destinationLabel}`
                 : `google.navigation:q=${lat},${lon}`;
 
-        const fallbackUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+        const fallbackUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=walking
+        `;
 
         try {
             const canOpenPreferred = await Linking.canOpenURL(preferredUrl);

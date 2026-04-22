@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 
+const SAFE_SELECT = '-passwordHash -resetTokenHash -resetTokenExpiry';
+
 @Injectable()
 export class UsersService {
   constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
@@ -98,5 +100,28 @@ export class UsersService {
     }
 
     return user as UserDocument;
+  }
+
+  // ── Admin methods ────────────────────────────────────────────────────────
+
+  async findAll(): Promise<any[]> {
+    return this.userModel
+      .find()
+      .select(SAFE_SELECT)
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+  }
+
+  async updateRole(id: string, role: string): Promise<any> {
+    return this.userModel
+      .findByIdAndUpdate(id, { role }, { new: true })
+      .select(SAFE_SELECT)
+      .lean()
+      .exec();
+  }
+
+  async deleteUser(id: string): Promise<any> {
+    return this.userModel.findByIdAndDelete(id).exec();
   }
 }

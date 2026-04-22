@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import MapView, { Marker, Region, UrlTile } from 'react-native-maps';
+import MapView, { Marker, Polygon, Region, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { authApi, placesApi } from '../../services/api';
 import { colors } from '../../constants/colors';
@@ -60,7 +60,7 @@ const FALLBACK_REGION: Region = {
 const DEFAULT_RADIUS_METERS = 5000;
 const DISTANCE_PRESETS_METERS = [500, 1000, 1500, 2500, 5000] as const;
 const DEFAULT_LIMIT = 30;  // how many places reder to fetch from the API per request and display on the map (client-side clustering is applied on top of this)
-const CLUSTER_ZOOM_THRESHOLD = 0.032; // Approx zoom level 15-16 where clustering starts   but  32 is the best
+
 const TILE_URL_TEMPLATE =        // You can use your own tile server or a third-party one. Just make sure to respect the usage policies and provide proper attribution.
   process.env.EXPO_PUBLIC_TILE_URL ||
   'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'; //https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png
@@ -99,90 +99,197 @@ function distanceBetweenMeters(            // Haversine formula implementation t
   return earthRadiusMeters * c;
 }
 
-type ClusteredMarker = {  
+// ── Hierarchical polygon clustering ──────────────────────────────────────────
+
+type HullPoint = { latitude: number; longitude: number };
+
+type ClusterNode = {
   key: string;
-  latitude: number;
-  longitude: number;
+  centroid: HullPoint;
+  hull: HullPoint[];        // convex-hull vertices (ordered)
   count: number;
   places: NearbyPlace[];
+  isDegenerate: boolean;   // true when group had < 3 distinct points (would render a line)
 };
 
-type MarkerRenderItem =  // Defines the type for items that can be rendered as markers on the map, which can be either individual places or clusters of places
-  | { kind: 'place'; place: NearbyPlace }
-  | { kind: 'cluster'; cluster: ClusteredMarker };
+type ZoomLayer = 0 | 1 | 2 | 3 | 4;
 
-function buildClusteredMarkers(  // Clusters nearby places into groups based on proximity and returns an array of markers to render (either individual places or clusters)
-  sourcePlaces: NearbyPlace[],
-  region: Region,
-): MarkerRenderItem[] {
-  const viewHeightMeters = region.latitudeDelta * 111000;
-  const clusterRadiusMeters = Math.min(
-    650,
-    Math.max(45, viewHeightMeters * 0.07),
+type MarkerRenderItem =
+  | { kind: 'place'; place: NearbyPlace }
+  | { kind: 'polygon'; cluster: ClusterNode; layer: ZoomLayer };
+
+// Layer colour palette
+const LAYER_COLORS: Record<ZoomLayer, { fill: string; stroke: string; badge: string }> = {
+  0: { fill: 'transparent',            stroke: 'transparent',        badge: '#0F172A' },
+  1: { fill: 'rgba(59,130,246,0.15)',  stroke: 'rgba(59,130,246,0.7)',  badge: '#2563EB' },
+  2: { fill: 'rgba(139,92,246,0.15)', stroke: 'rgba(139,92,246,0.7)', badge: '#7C3AED' },
+  3: { fill: 'rgba(249,115,22,0.15)', stroke: 'rgba(249,115,22,0.7)', badge: '#EA580C' },
+  4: { fill: 'rgba(239,68,68,0.15)',  stroke: 'rgba(239,68,68,0.7)',  badge: '#DC2626' },
+};
+
+// Map latitudeDelta → zoom layer
+function getZoomLayer(latDelta: number): ZoomLayer {
+  // Individual pins are visible from a much wider zoom range now
+  if (latDelta < 0.010)  return 0;   // neighbourhood-level and closer → individual pins
+  if (latDelta < 0.032)  return 1;
+  if (latDelta < 0.09)   return 2;
+  if (latDelta < 0.20)   return 3;
+  return 4;
+}
+
+// Fixed geographic cluster radii per layer.
+// These MUST NOT scale with the current view-height — otherwise when
+// zoomed out, L1 swallows everything into one cluster, leaving L2+ empty.
+const LAYER_RADII: Record<ZoomLayer, number> = {
+  0: 0,     // unused — layer 0 renders individual pins
+  1: 300,   // same block / building cluster
+  2: 1000,  // neighbourhood cluster
+  3: 4000,  // district cluster
+  4: 15000, // city-area cluster
+};
+
+// Graham scan convex hull on lat/lon points
+function convexHull(pts: HullPoint[]): HullPoint[] {
+  if (pts.length <= 2) return [...pts];
+
+  // Sort by latitude then longitude
+  const sorted = [...pts].sort(
+    (a, b) => a.latitude - b.latitude || a.longitude - b.longitude,
   );
 
-  const clusters: {
-    latitude: number;
-    longitude: number;
-    places: NearbyPlace[];
-  }[] = [];
+  const cross = (o: HullPoint, a: HullPoint, b: HullPoint) =>
+    (a.longitude - o.longitude) * (b.latitude - o.latitude) -
+    (a.latitude - o.latitude) * (b.longitude - o.longitude);
 
-  sourcePlaces.forEach((place) => {
-    const [lon, lat] = place.location.coordinates;
-    const point = { latitude: lat, longitude: lon };
+  const lower: HullPoint[] = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0)
+      lower.pop();
+    lower.push(p);
+  }
 
-    let targetClusterIndex = -1;
-    let smallestDistance = Number.MAX_SAFE_INTEGER;
+  const upper: HullPoint[] = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0)
+      upper.pop();
+    upper.push(p);
+  }
 
-    for (let i = 0; i < clusters.length; i += 1) {
-      const cluster = clusters[i];
-      const distance = distanceBetweenMeters(point, {
-        latitude: cluster.latitude,
-        longitude: cluster.longitude,
-      });
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
 
-      if (distance <= clusterRadiusMeters && distance < smallestDistance) {
-        smallestDistance = distance;
-        targetClusterIndex = i;
+// Expand a degenerate hull (< 3 pts) into a tiny circle of 8 points
+function circleHull(centre: HullPoint, radiusDeg: number): HullPoint[] {
+  return Array.from({ length: 8 }, (_, i) => ({
+    latitude:  centre.latitude  + radiusDeg * Math.sin((i / 8) * 2 * Math.PI),
+    longitude: centre.longitude + radiusDeg * Math.cos((i / 8) * 2 * Math.PI),
+  }));
+}
+
+// Greedy grouper: assign points into radius-based clusters
+function greedyGroup(
+  points: HullPoint[],
+  radiusMeters: number,
+): HullPoint[][] {
+  const groups: HullPoint[][] = [];
+  const centroids: HullPoint[] = [];
+
+  for (const pt of points) {
+    let best = -1;
+    let bestDist = Number.MAX_SAFE_INTEGER;
+    for (let i = 0; i < centroids.length; i++) {
+      const d = distanceBetweenMeters(pt, centroids[i]);
+      if (d <= radiusMeters && d < bestDist) { best = i; bestDist = d; }
+    }
+    if (best === -1) {
+      groups.push([pt]);
+      centroids.push({ ...pt });
+    } else {
+      groups[best].push(pt);
+      // update running centroid
+      const n = groups[best].length;
+      centroids[best].latitude  = (centroids[best].latitude  * (n - 1) + pt.latitude)  / n;
+      centroids[best].longitude = (centroids[best].longitude * (n - 1) + pt.longitude) / n;
+    }
+  }
+  return groups;
+}
+
+// Build one layer of ClusterNodes from a list of input points (with associated places)
+function buildLayerNodes(
+  items: { pt: HullPoint; places: NearbyPlace[] }[],
+  radiusMeters: number,
+  layerIndex: number,
+): ClusterNode[] {
+  if (radiusMeters === 0) return [];
+
+  const pts = items.map((i) => i.pt);
+  const groups = greedyGroup(pts, radiusMeters);
+
+  // Map pts back to their items
+  const used = new Set<number>();
+  return groups.map((grp, gi) => {
+    const memberItems: typeof items = [];
+    for (const gPt of grp) {
+      for (let k = 0; k < items.length; k++) {
+        if (!used.has(k) && items[k].pt.latitude === gPt.latitude && items[k].pt.longitude === gPt.longitude) {
+          memberItems.push(items[k]);
+          used.add(k);
+          break;
+        }
       }
     }
-
-    if (targetClusterIndex === -1) {
-      clusters.push({
-        latitude: lat,
-        longitude: lon,
-        places: [place],
-      });
-      return;
-    }
-
-    const targetCluster = clusters[targetClusterIndex];
-    const updatedPlaces = [...targetCluster.places, place];
-    const updatedCount = updatedPlaces.length;
-
-    targetCluster.latitude =
-      (targetCluster.latitude * targetCluster.places.length + lat) / updatedCount;
-    targetCluster.longitude =
-      (targetCluster.longitude * targetCluster.places.length + lon) / updatedCount;
-    targetCluster.places = updatedPlaces;
-  });
-
-  return clusters.map((cluster, index) => {
-    if (cluster.places.length === 1) {
-      return { kind: 'place' as const, place: cluster.places[0] };
-    }
+    const allPlaces = memberItems.flatMap((m) => m.places);
+    const n = grp.length;
+    const centroid: HullPoint = {
+      latitude:  grp.reduce((s, p) => s + p.latitude,  0) / n,
+      longitude: grp.reduce((s, p) => s + p.longitude, 0) / n,
+    };
+    const rawHull = convexHull(grp);
+    const degenerate = rawHull.length < 3;
+    const hull = degenerate
+      ? circleHull(centroid, 0.0004 * (layerIndex + 1))
+      : rawHull;
 
     return {
-      kind: 'cluster' as const,
-      cluster: {
-        key: `cluster-${index}-${cluster.places.length}`,
-        latitude: cluster.latitude,
-        longitude: cluster.longitude,
-        count: cluster.places.length,
-        places: cluster.places,
-      },
+      key: `L${layerIndex}-${gi}-${allPlaces.length}`,
+      centroid,
+      hull,
+      count: allPlaces.length,
+      places: allPlaces,
+      isDegenerate: degenerate,
     };
   });
+}
+
+// Build all 4 layers from raw places.
+// Each layer uses a FIXED radius so the hierarchy is stable at every zoom.
+function buildAllLayers(
+  sourcePlaces: NearbyPlace[],
+): Record<ZoomLayer, ClusterNode[]> {
+  // Layer 1: raw place coordinates → 150 m groups
+  const l1Items = sourcePlaces.map((p) => ({
+    pt: { latitude: p.location.coordinates[1], longitude: p.location.coordinates[0] },
+    places: [p],
+  }));
+  const L1 = buildLayerNodes(l1Items, LAYER_RADII[1], 1);
+
+  // Layer 2: L1 centroids → 600 m groups
+  const l2Items = L1.map((c) => ({ pt: c.centroid, places: c.places }));
+  const L2 = buildLayerNodes(l2Items, LAYER_RADII[2], 2);
+
+  // Layer 3: L2 centroids → 2 km groups
+  const l3Items = L2.map((c) => ({ pt: c.centroid, places: c.places }));
+  const L3 = buildLayerNodes(l3Items, LAYER_RADII[3], 3);
+
+  // Layer 4: L3 centroids → 7 km groups
+  const l4Items = L3.map((c) => ({ pt: c.centroid, places: c.places }));
+  const L4 = buildLayerNodes(l4Items, LAYER_RADII[4], 4);
+
+  return { 0: [], 1: L1, 2: L2, 3: L3, 4: L4 };
 }
 
 const BADGE_STYLES: Record<
@@ -271,6 +378,63 @@ const PlaceMarker = React.memo(
     prev.place.category === next.place.category &&
     prev.onMarkerPress === next.onMarkerPress,
 );
+
+// Plain-text count label for polygon clusters.
+// No badge/circle — just a bold number sitting inside the shape.
+type ClusterLabelProps = {
+  cluster: ClusterNode;
+  palette: { stroke: string };
+  onPress: () => void;
+};
+
+const ClusterLabelMarker = React.memo(function ClusterLabelMarker({
+  cluster,
+  palette,
+  onPress,
+}: ClusterLabelProps) {
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setTracksViewChanges(false), 200);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    setTracksViewChanges(true);
+    const t = setTimeout(() => setTracksViewChanges(false), 150);
+    return () => clearTimeout(t);
+  }, [cluster.count]);
+
+  return (
+    <Marker
+      coordinate={cluster.centroid}
+      anchor={{ x: 0.5, y: 0.5 }}
+      tracksViewChanges={tracksViewChanges}
+      onPress={onPress}
+    >
+      <View style={clusterLabelStyles.wrap}>
+        <Text style={[clusterLabelStyles.number, { color: palette.stroke }]}>
+          {cluster.count}
+        </Text>
+      </View>
+    </Marker>
+  );
+});
+
+const clusterLabelStyles = StyleSheet.create({
+  wrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  number: {
+    fontSize: 15,
+    fontWeight: '900',
+    // Dark outline so it reads on both light and dark polygon fills
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+});
 
 export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
   const [activeFilter, setActiveFilter] = useState('All');
@@ -668,32 +832,56 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
     [getUserDistanceMeters, navigation, selectedPlaceId],
   );
 
-  const shouldClusterMarkers =
-    filteredPlaces.length > 1 &&
-    (visibleRegion.latitudeDelta > CLUSTER_ZOOM_THRESHOLD ||
-      visibleRegion.longitudeDelta > CLUSTER_ZOOM_THRESHOLD);
+  // Current zoom layer (0 = all separate pins; 1-4 = hierarchical polygons)
+  const zoomLayer = useMemo(
+    () => getZoomLayer(visibleRegion.latitudeDelta),
+    [visibleRegion.latitudeDelta],
+  );
 
-  const renderedMarkers = useMemo(() => {
-    if (!shouldClusterMarkers) {
-      return filteredPlaces.map((place) => ({
-        kind: 'place' as const,
-        place,
-      }));
+  // Pre-build all 4 cluster layers whenever the place data changes.
+  // Region is NOT a dependency — radii are fixed, independent of zoom.
+  const allLayers = useMemo(
+    () => buildAllLayers(filteredPlaces),
+    [filteredPlaces],
+  );
+
+  const renderedMarkers = useMemo<MarkerRenderItem[]>(() => {
+    if (zoomLayer === 0 || filteredPlaces.length <= 1) {
+      return filteredPlaces.map((place) => ({ kind: 'place' as const, place }));
     }
 
-    return buildClusteredMarkers(filteredPlaces, visibleRegion);
-  }, [filteredPlaces, shouldClusterMarkers, visibleRegion]);
+    const nodes = allLayers[zoomLayer];
+    const items: MarkerRenderItem[] = [];
+    for (const node of nodes) {
+      if (node.count <= 2) {
+        // 1 or 2 places → always render as individual pins, never a polygon
+        for (const place of node.places) {
+          items.push({ kind: 'place' as const, place });
+        }
+      } else {
+        items.push({ kind: 'polygon' as const, cluster: node, layer: zoomLayer });
+      }
+    }
+    return items;
+  }, [allLayers, filteredPlaces, zoomLayer]);
 
-  const handleClusterPress = useCallback((cluster: ClusteredMarker) => {
+  const handleClusterPress = useCallback((cluster: ClusterNode) => {
+    // Zoom into the cluster's bounding box
+    const lats = cluster.hull.map((p) => p.latitude);
+    const lons = cluster.hull.map((p) => p.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+    const pad = 1.4; // padding factor
     const nextRegion: Region = {
-      latitude: cluster.latitude,
-      longitude: cluster.longitude,
-      latitudeDelta: Math.max(visibleRegion.latitudeDelta * 0.5, 0.004),
-      longitudeDelta: Math.max(visibleRegion.longitudeDelta * 0.5, 0.004),
+      latitude:  (minLat + maxLat) / 2,
+      longitude: (minLon + maxLon) / 2,
+      latitudeDelta:  Math.max((maxLat - minLat) * pad, 0.004),
+      longitudeDelta: Math.max((maxLon - minLon) * pad, 0.004),
     };
-
-    mapRef.current?.animateToRegion(nextRegion, 280);
-  }, [visibleRegion.latitudeDelta, visibleRegion.longitudeDelta]);
+    mapRef.current?.animateToRegion(nextRegion, 320);
+  }, []);
 
   const isZoomedInForLabel =
     visibleRegion.latitudeDelta <= 0.018 && visibleRegion.longitudeDelta <= 0.018;
@@ -718,7 +906,6 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           {renderedMarkers.map((item) => {
             if (item.kind === 'place') {
               const { place } = item;
-
               return (
                 <PlaceMarker
                   key={place.sourceId}
@@ -731,22 +918,27 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
               );
             }
 
-            const { cluster } = item;
-
+            // Polygon cluster
+            const { cluster, layer } = item;
+            const palette = LAYER_COLORS[layer];
             return (
-              <Marker
-                key={`cluster:${cluster.key}`}
-                coordinate={{
-                  latitude: cluster.latitude,
-                  longitude: cluster.longitude,
-                }}
-                anchor={{ x: 0.5, y: 0.5 }}
-                onPress={() => handleClusterPress(cluster)}
-              >
-                <View style={styles.clusterBubble}>
-                  <Text style={styles.clusterText}>{cluster.count}</Text>
-                </View>
-              </Marker>
+              <React.Fragment key={`poly:${cluster.key}`}>
+                {/* Only draw polygon when we have 3+ real points */}
+                {!cluster.isDegenerate && (
+                  <Polygon
+                    coordinates={cluster.hull}
+                    fillColor={palette.fill}
+                    strokeColor={palette.stroke}
+                    strokeWidth={2}
+                  />
+                )}
+                {/* Plain count label inside the polygon */}
+                <ClusterLabelMarker
+                  cluster={cluster}
+                  palette={palette}
+                  onPress={() => handleClusterPress(cluster)}
+                />
+              </React.Fragment>
             );
           })}
         </MapView>
@@ -1365,6 +1557,32 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  // Polygon cluster badge — outer ring (stroke-coloured border)
+  clusterPolygonBadge: {
+    minWidth: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2.5,
+    // borderColor is set inline from palette.stroke
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  // Inner filled circle
+  clusterPolygonInner: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  clusterPolygonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   searchAreaBtn: {
     position: 'absolute',
