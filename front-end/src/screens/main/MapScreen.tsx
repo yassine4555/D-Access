@@ -12,6 +12,18 @@ import {
   View,
 } from 'react-native';
 import MapView, { Marker, Polygon, Region, UrlTile } from 'react-native-maps';
+import {
+  GestureDetector,
+  Gesture,
+  GestureHandlerRootView
+} from 'react-native-gesture-handler';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
+import { useWindowDimensions } from 'react-native';
 import * as Location from 'expo-location';
 import { authApi, placesApi } from '../../services/api';
 import { colors } from '../../constants/colors';
@@ -24,7 +36,7 @@ import { TargetPositionIcon } from '../../components/icons/TargetPositionIcon';
 import { MapScreenProps } from '../../types/navigation';
 import { NearbyPlace, WheelchairAccessibility } from '../../types/place';
 import { SearchIcon } from '../../components/icons/searchIcon';
-import { MapPlacePin } from '../../components/common/MapPlacePin';
+import { MapPlacePin, PIN_MARKER_HEIGHT, PIN_MARKER_WIDTH } from '../../components/common/MapPlacePin';
 import {
   createNearbyPlacesCacheKey,
   getCachedNearbyPlaces,
@@ -74,16 +86,16 @@ function sortPlacesByDistance(places: NearbyPlace[]): NearbyPlace[] {  // Sort p
 }
 
 function formatDistance(distanceMeters?: number): string {  // Formats distance in meters to a more readable string in meters or kilometers depending on the value 
-  if (typeof distanceMeters !== 'number') return '';    
+  if (typeof distanceMeters !== 'number') return '';
   if (distanceMeters < 1000) return `${Math.round(distanceMeters)} m`;   //   500 → "500 m"  1500 → "1.5 Km"
   return `${(distanceMeters / 1000).toFixed(1)} Km`;  // if distance is less than 1000m, show in meters rounded to nearest whole number, otherwise show in kilometers with one decimal place
 }
 
 function distanceBetweenMeters(            // Haversine formula implementation to calculate distance between two lat/lon points in meters 
-  from: { latitude: number; longitude: number },    
+  from: { latitude: number; longitude: number },
   to: { latitude: number; longitude: number },      //used for clustering and distance calculations when user location is available
 ): number {
-  const toRadians = (value: number) => (value * Math.PI) / 180;    
+  const toRadians = (value: number) => (value * Math.PI) / 180;
   const earthRadiusMeters = 6371000;
 
   const dLat = toRadians(to.latitude - from.latitude);
@@ -120,20 +132,20 @@ type MarkerRenderItem =
 
 // Layer colour palette
 const LAYER_COLORS: Record<ZoomLayer, { fill: string; stroke: string; badge: string }> = {
-  0: { fill: 'transparent',            stroke: 'transparent',        badge: '#0F172A' },
-  1: { fill: 'rgba(59,130,246,0.15)',  stroke: 'rgba(59,130,246,0.7)',  badge: '#2563EB' },
+  0: { fill: 'transparent', stroke: 'transparent', badge: '#0F172A' },
+  1: { fill: 'rgba(59,130,246,0.15)', stroke: 'rgba(59,130,246,0.7)', badge: '#2563EB' },
   2: { fill: 'rgba(139,92,246,0.15)', stroke: 'rgba(139,92,246,0.7)', badge: '#7C3AED' },
   3: { fill: 'rgba(249,115,22,0.15)', stroke: 'rgba(249,115,22,0.7)', badge: '#EA580C' },
-  4: { fill: 'rgba(239,68,68,0.15)',  stroke: 'rgba(239,68,68,0.7)',  badge: '#DC2626' },
+  4: { fill: 'rgba(239,68,68,0.15)', stroke: 'rgba(239,68,68,0.7)', badge: '#DC2626' },
 };
 
 // Map latitudeDelta → zoom layer
 function getZoomLayer(latDelta: number): ZoomLayer {
   // Individual pins are visible from a much wider zoom range now
-  if (latDelta < 0.010)  return 0;   // neighbourhood-level and closer → individual pins
-  if (latDelta < 0.032)  return 1;
-  if (latDelta < 0.09)   return 2;
-  if (latDelta < 0.20)   return 3;
+  if (latDelta < 0.010) return 0;   // neighbourhood-level and closer → individual pins
+  if (latDelta < 0.032) return 1;
+  if (latDelta < 0.09) return 2;
+  if (latDelta < 0.20) return 3;
   return 4;
 }
 
@@ -184,7 +196,7 @@ function convexHull(pts: HullPoint[]): HullPoint[] {
 // Expand a degenerate hull (< 3 pts) into a tiny circle of 8 points
 function circleHull(centre: HullPoint, radiusDeg: number): HullPoint[] {
   return Array.from({ length: 8 }, (_, i) => ({
-    latitude:  centre.latitude  + radiusDeg * Math.sin((i / 8) * 2 * Math.PI),
+    latitude: centre.latitude + radiusDeg * Math.sin((i / 8) * 2 * Math.PI),
     longitude: centre.longitude + radiusDeg * Math.cos((i / 8) * 2 * Math.PI),
   }));
 }
@@ -211,7 +223,7 @@ function greedyGroup(
       groups[best].push(pt);
       // update running centroid
       const n = groups[best].length;
-      centroids[best].latitude  = (centroids[best].latitude  * (n - 1) + pt.latitude)  / n;
+      centroids[best].latitude = (centroids[best].latitude * (n - 1) + pt.latitude) / n;
       centroids[best].longitude = (centroids[best].longitude * (n - 1) + pt.longitude) / n;
     }
   }
@@ -245,7 +257,7 @@ function buildLayerNodes(
     const allPlaces = memberItems.flatMap((m) => m.places);
     const n = grp.length;
     const centroid: HullPoint = {
-      latitude:  grp.reduce((s, p) => s + p.latitude,  0) / n,
+      latitude: grp.reduce((s, p) => s + p.latitude, 0) / n,
       longitude: grp.reduce((s, p) => s + p.longitude, 0) / n,
     };
     const rawHull = convexHull(grp);
@@ -335,7 +347,7 @@ const PlaceMarker = React.memo(
     useEffect(() => {
       const initialTimer = setTimeout(() => {
         setTrackViewChanges(false);
-      }, 160);
+      }, 400);
 
       return () => {
         clearTimeout(initialTimer);
@@ -346,19 +358,21 @@ const PlaceMarker = React.memo(
       setTrackViewChanges(true);
       const timer = setTimeout(() => {
         setTrackViewChanges(false);
-      }, 120);
+      }, 400);
 
       return () => {
         clearTimeout(timer);
       };
-    }, [isSelected, place.category, showPlaceName, wheelchair]);
+    }, [isSelected, place.category, wheelchair]);
 
     return (
       <Marker
         coordinate={{ latitude: lat, longitude: lng }}
-        anchor={{ x: 0.5, y: 1 }}
+        // anchor y = PIN_H / TOTAL_H = 38 / 58 ≈ 0.655 → pin tip at coordinate
+        anchor={{ x: 0.5, y: 38 / PIN_MARKER_HEIGHT }}
         tracksViewChanges={trackViewChanges}
         onPress={() => onMarkerPress(place)}
+        hitSlop={{ top: 40, bottom: 40, left: 40, right: 40 }}
       >
         <MapPlacePin
           wheelchair={wheelchair}
@@ -411,6 +425,7 @@ const ClusterLabelMarker = React.memo(function ClusterLabelMarker({
       anchor={{ x: 0.5, y: 0.5 }}
       tracksViewChanges={tracksViewChanges}
       onPress={onPress}
+      hitSlop={{ top: 40, bottom: 40, left: 40, right: 40 }}
     >
       <View style={clusterLabelStyles.wrap}>
         <Text style={[clusterLabelStyles.number, { color: palette.stroke }]}>
@@ -437,6 +452,48 @@ const clusterLabelStyles = StyleSheet.create({
 });
 
 export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
+  const { height: screenHeight } = useWindowDimensions();
+
+  // Snap points (y-translation values)
+  const SNAP_TOP = 50; 
+  const SNAP_HALF = screenHeight * 0.45;
+  const SNAP_BOTTOM = screenHeight - 160;
+
+  const translateY = useSharedValue(SNAP_HALF);
+  const context = useSharedValue({ y: 0 });
+
+  const gesture = Gesture.Pan()
+    .onStart(() => {
+      context.value = { y: translateY.value };
+    })
+    .onUpdate((event) => {
+      translateY.value = event.translationY + context.value.y;
+      
+      // Constraints
+      if (translateY.value < SNAP_TOP) {
+        translateY.value = SNAP_TOP;
+      }
+    })
+    .onEnd((event) => {
+      if (event.velocityY < -500) {
+        translateY.value = withSpring(SNAP_TOP, { damping: 50 });
+      } else if (event.velocityY > 500) {
+        translateY.value = withSpring(SNAP_BOTTOM, { damping: 50 });
+      } else {
+        if (translateY.value < (SNAP_TOP + SNAP_HALF) / 2) {
+          translateY.value = withSpring(SNAP_TOP, { damping: 50 });
+        } else if (translateY.value < (SNAP_HALF + SNAP_BOTTOM) / 2) {
+          translateY.value = withSpring(SNAP_HALF, { damping: 50 });
+        } else {
+          translateY.value = withSpring(SNAP_BOTTOM, { damping: 50 });
+        }
+      }
+    });
+
+  const animatedSheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
   const [activeFilter, setActiveFilter] = useState('All');
   const [wheelchairFilterMode, setWheelchairFilterMode] =
     useState<AccessibilityFilterMode>('all');
@@ -875,9 +932,9 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
     const maxLon = Math.max(...lons);
     const pad = 1.4; // padding factor
     const nextRegion: Region = {
-      latitude:  (minLat + maxLat) / 2,
+      latitude: (minLat + maxLat) / 2,
       longitude: (minLon + maxLon) / 2,
-      latitudeDelta:  Math.max((maxLat - minLat) * pad, 0.004),
+      latitudeDelta: Math.max((maxLat - minLat) * pad, 0.004),
       longitudeDelta: Math.max((maxLon - minLon) * pad, 0.004),
     };
     mapRef.current?.animateToRegion(nextRegion, 320);
@@ -887,11 +944,12 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
     visibleRegion.latitudeDelta <= 0.018 && visibleRegion.longitudeDelta <= 0.018;
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" />
 
       {/* ── MAP ── */}
-      <View style={styles.mapContainer}>
+      <View style={[styles.mapContainer, StyleSheet.absoluteFillObject]}>
         <MapView
           ref={mapRef}
           style={styles.map}
@@ -1010,7 +1068,8 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
       </View>
 
       {/* ── BOTTOM SHEET ── */}
-      <View style={styles.sheet}>
+      <GestureDetector gesture={gesture}>
+        <Animated.View style={[styles.sheet, animatedSheetStyle]}>
         {/* Drag handle */}
         <View style={styles.handleWrap}>
           <View style={styles.handle} />
@@ -1019,7 +1078,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
         {/* Search row */}
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
-            <SearchIcon color={colors.gray500}  />
+            <SearchIcon color={colors.gray500} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search"
@@ -1208,7 +1267,8 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           )}
 
         </ScrollView>
-      </View>
+      </Animated.View>
+    </GestureDetector>
 
       <Modal
         visible={isFilterModalVisible}
@@ -1320,7 +1380,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
               style={[
                 styles.filterOptionCard,
                 draftWheelchairFilterMode === 'known' &&
-                  styles.filterOptionCardActive,
+                styles.filterOptionCardActive,
               ]}
             >
               <View style={styles.filterOptionLeftIconWrap}>
@@ -1351,12 +1411,11 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
                   style={[
                     styles.filterDistanceTrackProgress,
                     {
-                      width: `${
-                        ((draftSearchRadiusMeters - DISTANCE_PRESETS_METERS[0]) /
+                      width: `${((draftSearchRadiusMeters - DISTANCE_PRESETS_METERS[0]) /
                           (DISTANCE_PRESETS_METERS[DISTANCE_PRESETS_METERS.length - 1] -
                             DISTANCE_PRESETS_METERS[0])) *
                         100
-                      }%`,
+                        }%`,
                     },
                   ]}
                 />
@@ -1442,6 +1501,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
         </View>
       </Modal>
     </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -1453,7 +1513,7 @@ const styles = StyleSheet.create({
 
   // ── Map ──
   mapContainer: {
-    height: '52%',
+    flex: 1,
     position: 'relative',
   },
   map: {
@@ -1633,11 +1693,14 @@ const styles = StyleSheet.create({
 
   // ── Bottom sheet ──
   sheet: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
     backgroundColor: '#FDFDFD',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    marginTop: -28,//28 bech tna9s l'espace ben map w sheet w t5alle lhandle yb9a visible w y3ti effect zwin
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowRadius: 16,
