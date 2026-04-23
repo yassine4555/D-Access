@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import * as Location from 'expo-location';
 import { placesApi } from '../../services/api';
+import { getCurrentCoordinatesAsync } from '../../services/location';
 
 export default function DiscoveryScreen() {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -11,15 +11,8 @@ export default function DiscoveryScreen() {
     useEffect(() => {
         (async () => {
             try {
-                let { status } = await Location.requestForegroundPermissionsAsync();
-                if (status !== 'granted') {
-                    setErrorMsg('Permission to access location was denied');
-                    setLoading(false);
-                    return;
-                }
-
-                let currentLocation = await Location.getCurrentPositionAsync({});
-                fetchNearbyPlaces(currentLocation.coords.latitude, currentLocation.coords.longitude);
+                const currentLocation = await getCurrentCoordinatesAsync();
+                fetchNearbyPlaces(currentLocation.latitude, currentLocation.longitude);
             } catch (error) {
                 console.error(error);
                 setErrorMsg('Unable to retrieve your location');

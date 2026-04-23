@@ -11,6 +11,9 @@ import {
     placeDetailsSchema,
     placeReportsResponseSchema,
 } from '../schemas/placeSchemas';
+import {
+    marketplaceResponseSchema,
+} from '../schemas/marketplaceSchemas';
 
 const BASE_URL = getApiBaseUrl();
 const BASE_URL_CANDIDATES = getApiBaseUrlCandidates();
@@ -261,7 +264,22 @@ export const placesApi = {
 };
 
 export const productsApi = {
-    getAll: () => api.get('/products'),
+    getAll: async () => {
+        const response = await api.get('/marketplace');
+        const parsed = marketplaceResponseSchema.safeParse(response.data);
+
+        if (!parsed.success) {
+            console.error('[productsApi.getAll] Invalid response payload:', parsed.error.flatten());
+            throw new Error('Invalid marketplace response from server');
+        }
+
+        response.data = parsed.data;
+        return response;
+    },
+    getById: async (id: string) => {
+        const response = await api.get(`/marketplace/${encodeURIComponent(id)}`);
+        return response;
+    },
 };
 
 export const postsApi = {

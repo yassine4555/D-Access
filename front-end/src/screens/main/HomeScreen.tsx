@@ -14,8 +14,8 @@ import {
 import { colors } from '../../constants/colors';
 import { HomeScreenProps } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
-import * as Location from 'expo-location';
 import { placesApi } from '../../services/api';
+import { getCurrentCoordinatesAsync } from '../../services/location';
 import { SearchIcon } from '../../components/icons/searchIcon';
 import { FilterIcon } from '../../components/icons/FilterIcon';
 import { ChipsIcon } from '../../components/icons/ChipsIcon';
@@ -69,15 +69,12 @@ export default function HomeScreen({ navigation }: HomeScreenProps<'HomeMain'>) 
     const fetchNearby = React.useCallback(async () => {
         setIsLoading(true);
         try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') return;
-
-            const current = await Location.getCurrentPositionAsync({});
+            const current = await getCurrentCoordinatesAsync();
             const category = activeFilter === 'All' ? undefined : activeFilter;
 
             const response = await placesApi.findNearby(
-                current.coords.latitude,
-                current.coords.longitude,
+                current.latitude,
+                current.longitude,
                 5000, // 5km radius
                 1,
                 10,

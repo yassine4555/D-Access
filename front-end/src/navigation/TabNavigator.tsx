@@ -29,6 +29,7 @@ import { useAuth } from '../context/AuthContext';
 import { AuthStatusPopup } from '../components/common/AuthStatusPopup';
 import { ExitAppPopup } from '../components/common/ExitAppPopup';
 import { navigationRef } from './navigationRef';
+import { isMockLocationEnabled } from '../services/location';
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
@@ -161,6 +162,10 @@ export default function TabNavigator() {
     }, [showExitPopup, showLocationPopup, showSuccessPopup]);
 
     useEffect(() => {
+        if (isMockLocationEnabled()) {
+            return;
+        }
+
         if (hasHandledLocationPrompt || showSuccessPopup || showLocationPopup) {
             return;
         }
@@ -209,6 +214,11 @@ export default function TabNavigator() {
     const openLocationPopup = async () => {
         setShowSuccessPopup(false);
 
+        if (isMockLocationEnabled()) {
+            closeFlow();
+            return;
+        }
+
         const permission = await Location.getForegroundPermissionsAsync();
         if (permission.status === 'granted') {
             closeFlow();
@@ -226,6 +236,11 @@ export default function TabNavigator() {
     };
 
     const handleAllowLocation = async () => {
+        if (isMockLocationEnabled()) {
+            closeFlow();
+            return;
+        }
+
         // Close custom popup first so it does not stack with the OS prompt.
         setShowLocationPopup(false);
         try {

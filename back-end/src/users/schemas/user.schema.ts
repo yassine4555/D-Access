@@ -4,16 +4,16 @@ import { Document, Types } from 'mongoose';
 @Schema({ _id: false })
 export class AccessibilitySettings {
   @Prop({ default: false })
-  biggerText: boolean;
+  biggerText!: boolean;
 
   @Prop({ default: false })
-  dyslexicFont: boolean;
+  dyslexicFont!: boolean;
 
   @Prop({ default: false })
-  hideImages: boolean;
+  hideImages!: boolean;
 
   @Prop({ default: false })
-  magnifier: boolean;
+  magnifier!: boolean;
 }
 
 export type UserDocument = User & Document;
@@ -21,44 +21,44 @@ export type UserDocument = User & Document;
 @Schema({ timestamps: true })
 export class User {
   @Prop({ required: true })
-  firstName: string;
+  firstName!: string;
 
   @Prop({ required: true })
-  lastName: string;
+  lastName!: string;
 
   @Prop({ required: true, unique: true, index: true })
-  email: string;
+  email!: string;
 
   @Prop({ required: false })
-  passwordHash: string;
+  passwordHash!: string;
 
   @Prop()
-  resetTokenHash: string;
+  resetTokenHash!: string;
 
   @Prop()
-  resetTokenExpiry: Date;
+  resetTokenExpiry!: Date;
 
   @Prop({ default: 'local' })
-  provider: string; // 'local' | 'google' | 'facebook' | 'apple'
+  provider!: string; // 'local' | 'google' | 'facebook' | 'apple'
 
   @Prop()
-  providerId: string; // OAuth provider's unique user ID
+  providerId!: string; // OAuth provider's unique user ID
 
   @Prop({
     type: String,
     enum: ['user', 'admin', 'moderator'],
     default: 'user',
   })
-  role: string;
+  role!: string;
 
   @Prop({ default: 'en' })
-  language: string;
+  language!: string;
 
   @Prop({ type: AccessibilitySettings })
-  accessibilitySettings: AccessibilitySettings;
+  accessibilitySettings!: AccessibilitySettings;
 
   @Prop({ type: Object, default: {} })
-  profile: {
+  profile!: {
     phone?: string;
     address?: string;
     city?: string;

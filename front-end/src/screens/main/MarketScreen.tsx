@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -8,32 +8,90 @@ import {
     Image,
     StyleSheet,
     StatusBar,
+    ActivityIndicator,
+    Linking,
 } from 'react-native';
 import { colors } from '../../constants/colors';
-import { shared, SPACING, RADIUS, FONT, SEMANTIC_COLORS } from '../../constants/sharedStyles';
+import { shared, SPACING, RADIUS, FONT } from '../../constants/sharedStyles';
 import { BackIcon } from '../../components/icons/BackIcon';
 import { SearchIcon } from '../../components/icons/searchIcon';
 import { MicrophoneIcon } from '../../components/icons/MicrophoneIcon';
 import { TabScreenProps } from '../../types/navigation';
-
-const PRODUCTS = [
-    {
-        id: '1',
-        title: 'Wheelchair automation kit',
-        price: '3000',
-        description: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
-        image: 'https://images.unsplash.com/photo-1596524430615-b46475ddff6e?w=800&q=80',
-    },
-    {
-        id: '2',
-        title: 'Portable Accessibility Ramp',
-        price: '450',
-        description: 'Easy to carry and set up, this ramp provides instant access to steps and curbs for wheelchair users.',
-        image: 'https://images.unsplash.com/photo-1596524430615-b46475ddff6e?w=800&q=80', // Replace with relevant image
-    },
-];
+import { productsApi } from '../../services/api';
+import type { MarketplaceItem } from '../../schemas/marketplaceSchemas';
 
 export default function MarketplaceScreen({ navigation }: TabScreenProps<'Marketplace'>) {
+    const [products, setProducts] = useState<MarketplaceItem[]>([]);
+    const [search, setSearch] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const loadProducts = async () => {
+        try {
+            setError(null);
+            const response = await productsApi.getAll();
+            setProducts(response.data?.data ?? []);
+        } catch (err) {
+            console.error('[MarketplaceScreen] Failed to load products:', err);
+            setError('Unable to load products right now.');
+            setProducts([]);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    useEffect(() => {
+        void loadProducts();
+    }, []);
+
+    const filteredProducts = useMemo(() => {
+        const query = search.trim().toLowerCase();
+
+        if (!query) {
+            return products;
+        }
+
+        return products.filter((product) =>
+            [product.name, product.description, product.category]
+                .filter(Boolean)
+                .some((value) => value.toLowerCase().includes(query)),
+        );
+    }, [products, search]);
+
+    const openMerchantSite = async (url: string) => {
+        try {
+            const canOpen = await Linking.canOpenURL(url);
+            await Linking.openURL(canOpen ? url : url);
+        } catch (err) {
+            console.error('[MarketplaceScreen] Could not open merchant URL:', err);
+        }
+    };
+
+    const formatPrice = (price: number) => {
+        if (!Number.isFinite(price)) {
+            return '$0';
+        }
+
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            maximumFractionDigits: 0,
+        }).format(price);
+    };
+
+    const getImageSource = (item: MarketplaceItem) => {
+        const firstImage = item.images?.[0];
+        if (firstImage) {
+            return { uri: firstImage };
+        }
+
+        return {
+            uri: 'https://images.unsplash.com/photo-1596524430615-b46475ddff6e?w=800&q=80',
+        };
+    };
+
     return (
         <View style={shared.container}>
             <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
@@ -58,6 +116,8 @@ export default function MarketplaceScreen({ navigation }: TabScreenProps<'Market
                             style={styles.searchInput}
                             placeholder="Search"
                             placeholderTextColor="#CAC9C9"
+                            value={search}
+                            onChangeText={setSearch}
                         />
                         <TouchableOpacity style={styles.microphoneIconWrapper}>
                             <MicrophoneIcon color="#CAC9C9" />
@@ -65,26 +125,60 @@ export default function MarketplaceScreen({ navigation }: TabScreenProps<'Market
                     </View>
                 </View>
 
-                {/* Product List */}
-                {PRODUCTS.map((item) => (
-                    <View key={item.id} style={styles.productCard}>
-                        <Image source={{ uri: item.image }} style={styles.productImage} />
-                        <View style={styles.productInfo}>
-                            <View style={styles.titlePriceRow}>
-                                <Text style={styles.productTitle}>{item.title}</Text>
-                                <Text style={styles.productPrice}>$ {item.price}</Text>
-                            </View>
-                            <Text style={styles.productDescription} numberOfLines={3}>
-                                {item.description}
-                            </Text>
-
-                            <TouchableOpacity style={styles.actionButton}>
-                                <Text style={styles.actionButtonText}>View on Merchant Site</Text>
-                                <Text style={styles.chevron}>›</Text>
-                            </TouchableOpacity>
-                        </View>
+                {loading ? (
+                    <View style={styles.stateBox}>
+                        <ActivityIndicator size="large" color="#4AAFD9" />
+                        <Text style={styles.stateText}>Loading products...</Text>
                     </View>
-                ))}
+                ) : error ? (
+                    <View style={styles.stateBox}>
+                        <Text style={styles.stateTitle}>Could not load marketplace</Text>
+                        <Text style={styles.stateText}>{error}</Text>
+                        <TouchableOpacity
+                            style={styles.retryButton}
+                            onPress={() => {
+                                setLoading(true);
+                                void loadProducts();
+                            }}
+                        >
+                            <Text style={styles.retryButtonText}>Retry</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : filteredProducts.length === 0 ? (
+                    <View style={styles.stateBox}>
+                        <Text style={styles.stateTitle}>No products found</Text>
+                        <Text style={styles.stateText}>
+                            Try a different search or come back later.
+                        </Text>
+                    </View>
+                ) : (
+                    filteredProducts.map((item) => (
+                        <View key={item.id} style={styles.productCard}>
+                            <Image source={getImageSource(item)} style={styles.productImage} />
+                            <View style={styles.productInfo}>
+                                <View style={styles.titlePriceRow}>
+                                    <View style={{ flex: 1, marginRight: SPACING.md }}>
+                                        <Text style={styles.productTitle}>{item.name}</Text>
+                                        <Text style={styles.categoryLabel}>{item.category}</Text>
+                                    </View>
+                                    <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
+                                </View>
+                                <Text style={styles.productDescription} numberOfLines={3}>
+                                    {item.description || 'No description available.'}
+                                </Text>
+
+                                <TouchableOpacity
+                                    style={styles.actionButton}
+                                    onPress={() => void openMerchantSite(item.productUrl)}
+                                    activeOpacity={0.9}
+                                >
+                                    <Text style={styles.actionButtonText}>View on Merchant Site</Text>
+                                    <Text style={styles.chevron}>›</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    ))
+                )}
 
                 <View style={shared.bottomSpacer} />
             </ScrollView>
@@ -210,6 +304,13 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         fontFamily: 'Poppins',
     },
+    categoryLabel: {
+        marginTop: 4,
+        color: '#64748B',
+        fontSize: 12,
+        textTransform: 'capitalize',
+        fontFamily: 'Poppins',
+    },
     actionButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -230,5 +331,44 @@ const styles = StyleSheet.create({
         color: colors.white,
         fontSize: 20,
         fontWeight: '400',
+    },
+    stateBox: {
+        marginHorizontal: SPACING.lg,
+        paddingVertical: 32,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.white,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        gap: 10,
+    },
+    stateTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: colors.gray900,
+        fontFamily: 'Poppins',
+        textAlign: 'center',
+    },
+    stateText: {
+        fontSize: 13,
+        color: '#64748B',
+        fontFamily: 'Poppins',
+        textAlign: 'center',
+        lineHeight: 19,
+    },
+    retryButton: {
+        marginTop: 6,
+        backgroundColor: '#0F172A',
+        paddingHorizontal: 18,
+        paddingVertical: 10,
+        borderRadius: 999,
+    },
+    retryButtonText: {
+        color: colors.white,
+        fontWeight: '700',
+        fontSize: 14,
+        fontFamily: 'Manrope',
     },
 });
