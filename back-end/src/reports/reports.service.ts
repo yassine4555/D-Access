@@ -215,7 +215,7 @@ export class ReportsService {
             moderationReason: reason?.trim() || undefined,
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean()
       .exec();

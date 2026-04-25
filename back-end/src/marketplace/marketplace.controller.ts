@@ -47,6 +47,14 @@ export class MarketplaceController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MODERATOR)
+  @Get('admin/marketplace')
+  @ApiOperation({ summary: 'List marketplace items (admin/moderator)' })
+  findAllAdmin(@Query() query: ListMarketplaceItemsDto) {
+    return this.marketplaceService.findAll(query);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MODERATOR)
   @Post('admin/marketplace')
   @ApiOperation({ summary: 'Create marketplace item (admin/moderator)' })
   create(@Body() body: CreateMarketplaceItemDto) {

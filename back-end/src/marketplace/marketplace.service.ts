@@ -112,7 +112,7 @@ export class MarketplaceService {
     }
 
     const updated = await this.marketplaceItemModel
-      .findByIdAndUpdate(id, { $set: updateData }, { new: true })
+      .findByIdAndUpdate(id, { $set: updateData }, { returnDocument: 'after' })
       .lean()
       .exec();
 

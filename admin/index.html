@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>D-Access — Admin Panel</title>
+  <meta name="description" content="D-Access administration panel for managing users and accessibility reports." />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="brand-icon">♿</span>
+      <h1>D-Access</h1>
+      <p>Admin Panel — Restricted Access</p>
+    </div>
+    <form id="login-form" autocomplete="off">
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="admin@example.com" required />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="••••••••" required />
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="login-btn">Sign In</button>
+      <div id="login-error" class="error-msg hidden"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     APP SHELL
+══════════════════════════════════════════════════════════ -->
+<div id="app" class="hidden">
+
+  <!-- ── Sidebar ─────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon">♿</span>
+      <div>
+        <div class="brand-name">D-Access</div>
+        <div class="brand-sub">Admin Panel</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </button>
+      <button class="nav-item" data-page="users">
+        <span class="nav-icon">👥</span> Users
+      </button>
+      <button class="nav-item" data-page="reports">
+        <span class="nav-icon">📋</span> Reports
+      </button>
+      <button class="nav-item" data-page="marketplace">
+        <span class="nav-icon">🛒</span> Marketplace
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="current-user">
+        <div class="user-avatar" id="sidebar-avatar">A</div>
+        <div>
+          <div class="user-name" id="sidebar-name">Admin</div>
+          <div class="user-role-badge" id="sidebar-role">admin</div>
+        </div>
+      </div>
+      <button class="btn-logout" id="logout-btn">↩ &nbsp;Sign out</button>
+    </div>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div>
+        <h1 class="page-title" id="page-title">Dashboard</h1>
+        <p class="page-subtitle" id="page-subtitle">Platform overview at a glance</p>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ══ DASHBOARD PAGE ════════════════════════════════ -->
+      <section id="page-dashboard" class="page active">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8)">👥</div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-users-count"><span class="spinner"></span></div>
+              <div class="stat-label">Total Users</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)">⏳</div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-pending-count"><span class="spinner"></span></div>
+              <div class="stat-label">Pending Reports</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:linear-gradient(135deg,#10b981,#059669)">✅</div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-verified-count"><span class="spinner"></span></div>
+              <div class="stat-label">Verified Reports</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:linear-gradient(135deg,#ef4444,#dc2626)">🚫</div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-spam-count"><span class="spinner"></span></div>
+              <div class="stat-label">Spam Detected</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="card">
+            <div class="card-header">
+              <h3>Recent Reports</h3>
+              <button class="btn btn-sm btn-ghost" onclick="navigate('reports')">View all →</button>
+            </div>
+            <div id="recent-reports-list">
+              <div class="empty-state"><span class="spinner"></span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <h3>Recent Users</h3>
+              <button class="btn btn-sm btn-ghost" onclick="navigate('users')">View all →</button>
+            </div>
+            <div id="recent-users-list">
+              <div class="empty-state"><span class="spinner"></span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ USERS PAGE ════════════════════════════════════ -->
+      <section id="page-users" class="page">
+        <div class="card">
+          <div class="filters">
+            <input
+              type="text"
+              id="user-search"
+              class="search-input"
+              placeholder="🔍  Search by name or email…"
+            />
+          </div>
+          <div class="table-wrapper">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Provider</th>
+                  <th>Role</th>
+                  <th>Language</th>
+                  <th>Joined</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody">
+                <tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ REPORTS PAGE ══════════════════════════════════ -->
+      <section id="page-reports" class="page">
+        <div class="card">
+          <div class="filters">
+            <select id="filter-status" class="filter-select">
+              <option value="">All Statuses</option>
+              <option value="pending">⏳ Pending</option>
+              <option value="verified">✅ Verified</option>
+              <option value="rejected">✕ Rejected</option>
+              <option value="spam">🚫 Spam</option>
+            </select>
+            <select id="filter-type" class="filter-select">
+              <option value="">All Types</option>
+              <option value="elevator_out_of_order">🛗 Elevator Out</option>
+              <option value="ramp_blocked">🚧 Ramp Blocked</option>
+              <option value="parking_issue">🅿️ Parking Issue</option>
+              <option value="place_closed">🚪 Place Closed</option>
+              <option value="incorrect_info">ℹ️ Incorrect Info</option>
+              <option value="other">📌 Other</option>
+            </select>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Image</th>
+                  <th>Issue</th>
+                  <th>Place</th>
+                  <th>Reporter</th>
+                  <th>Status</th>
+                  <th>Spam Score</th>
+                  <th>Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="reports-tbody">
+                <tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <span id="reports-info" style="color:var(--text-2)">—</span>
+            <div class="pagination-controls">
+              <button class="btn btn-sm btn-ghost" id="btn-prev" disabled>← Prev</button>
+              <span id="page-indicator" style="padding:0 8px;color:var(--text-2);font-size:.82rem;align-self:center">Page 1</span>
+              <button class="btn btn-sm btn-ghost" id="btn-next">Next →</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ MARKETPLACE PAGE ════════════════════════════════ -->
+      <section id="page-marketplace" class="page">
+        <div class="mp-toolbar">
+          <input
+            type="text"
+            id="product-search"
+            class="search-input"
+            placeholder="🔍  Search products…"
+            oninput="filterProducts(this.value)"
+          />
+          <button class="btn btn-primary" onclick="openProductModal(null)" id="btn-add-product">
+            + Add Product
+          </button>
+        </div>
+        <div id="products-grid" class="products-grid">
+          <div class="empty-state"><span class="spinner"></span></div>
+        </div>
+      </section>
+
+    </div><!-- /content -->
+  </main>
+</div><!-- /app -->
+
+<!-- ══════════════════════════════════════════════════════════
+     IMAGE MODAL
+══════════════════════════════════════════════════════════ -->
+<div id="img-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Report Image</h3>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <img id="modal-img" class="modal-img" src="" alt="Report image" />
+      <p id="modal-desc" style="margin-top:12px;color:var(--text-2);font-size:.9rem"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modal-close-footer" onclick="closeImageModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PRODUCT FORM MODAL
+══════════════════════════════════════════════════════════ -->
+<div id="product-modal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:520px;width:100%">
+    <div class="modal-header">
+      <h3 id="product-modal-title">Add Product</h3>
+      <button class="modal-close" onclick="closeProductModal()">✕</button>
+    </div>
+    <form id="product-form" onsubmit="submitProductForm(event)">
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+
+        <div class="form-group">
+          <label for="pf-name">Product Name <span style="color:#ef4444">*</span></label>
+          <input type="text" id="pf-name" class="search-input" placeholder="e.g. Ergonomic Wheelchair" required />
+        </div>
+
+        <div class="form-group">
+          <label for="pf-price">Price <span style="color:#ef4444">*</span></label>
+          <input type="number" id="pf-price" class="search-input" placeholder="99.99" min="0" step="0.01" required />
+        </div>
+
+        <div class="form-group">
+          <label for="pf-image">Image URL <span style="color:#ef4444">*</span></label>
+          <input type="url" id="pf-image" class="search-input" placeholder="https://…/product.jpg" required />
+          <div id="pf-image-preview" style="margin-top:8px;display:none">
+            <img id="pf-preview-img" src="" alt="preview" style="max-height:120px;border-radius:8px;object-fit:cover;border:1px solid var(--border)" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="pf-shop">Shop URL <span style="color:#ef4444">*</span></label>
+          <input type="url" id="pf-shop" class="search-input" placeholder="https://shop.example.com/product" required />
+        </div>
+
+        <div class="form-group">
+          <label for="pf-desc">Description</label>
+          <textarea id="pf-desc" class="search-input" rows="3" placeholder="Short description…" style="resize:vertical"></textarea>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px">
+          <label style="font-size:.85rem;color:var(--text-2)">Active (visible in app)</label>
+          <input type="checkbox" id="pf-active" checked style="width:16px;height:16px;accent-color:var(--primary)" />
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeProductModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="product-submit-btn">Save Product</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -970,7 +970,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           )}
 
           {/* ── Reports Nearby ── */}
-          <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+        <View style={[styles.sectionHeader, { marginTop: 8 }]}>
             <Text style={styles.sectionTitle}>Reports Nearby</Text>
             <TouchableOpacity>
               <Text style={styles.seeAll}>See all</Text>
