@@ -16,12 +16,12 @@ export class NearbyPlacesDto {
   @ApiProperty({ example: 36.7538, description: 'Center latitude' })
   @Transform(({ value }) => Number(value))
   @IsLatitude()
-  lat: number;
+  lat!: number;
 
   @ApiProperty({ example: 3.0588, description: 'Center longitude' })
   @Transform(({ value }) => Number(value))
   @IsLongitude()
-  lon: number;
+  lon!: number;
 
   @ApiPropertyOptional({
     example: 3000,

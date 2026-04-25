@@ -148,7 +148,7 @@ export class ReportsService {
         .exec(),
       this.reportModel.countDocuments(filter).exec(),
     ]);
-
+// rest
     return {
       data: items.map((report) => ({
         id: report._id.toString(),
@@ -215,7 +215,7 @@ export class ReportsService {
             moderationReason: reason?.trim() || undefined,
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean()
       .exec();

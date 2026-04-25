@@ -13,6 +13,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreatePlaceReportDto } from './dto/create-place-report.dto';
 import { GetAdminReportsDto } from './dto/get-admin-reports.dto';
 import { GetPlaceReportsDto } from './dto/get-place-reports.dto';
@@ -46,7 +47,7 @@ export class ReportsController {
     return this.reportsService.getForPlace(id, query.limit ?? 20);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MODERATOR)
   @Get('admin/reports')
   @ApiOperation({ summary: 'Admin list reports with moderation filters' })
@@ -54,7 +55,7 @@ export class ReportsController {
     return this.reportsService.listForAdmin(query);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MODERATOR)
   @Patch('admin/reports/:id/verify')
   verifyReport(
@@ -65,7 +66,7 @@ export class ReportsController {
     return this.reportsService.verify(id, user._id, body.reason);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MODERATOR)
   @Patch('admin/reports/:id/reject')
   rejectReport(
@@ -76,7 +77,7 @@ export class ReportsController {
     return this.reportsService.reject(id, user._id, body.reason);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MODERATOR)
   @Patch('admin/reports/:id/mark-spam')
   markReportAsSpam(
@@ -87,7 +88,7 @@ export class ReportsController {
     return this.reportsService.markSpam(id, user._id, body.reason);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MODERATOR)
   @Patch('admin/reports/:id/unmark-spam')
   unmarkReportAsSpam(

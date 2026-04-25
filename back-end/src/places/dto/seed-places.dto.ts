@@ -13,12 +13,12 @@ export class SeedPlacesDto {
   @ApiProperty({ example: 36.7538, description: 'City center latitude' })
   @Transform(({ value }) => Number(value))
   @IsLatitude()
-  lat: number;
+  lat!: number;
 
   @ApiProperty({ example: 3.0588, description: 'City center longitude' })
   @Transform(({ value }) => Number(value))
   @IsLongitude()
-  lon: number;
+  lon!: number;
 
   @ApiPropertyOptional({
     example: 5000,

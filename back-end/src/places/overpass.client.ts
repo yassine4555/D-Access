@@ -29,8 +29,12 @@ export class OverpassClient {
   async queryPlaces(lat: number, lon: number, radius: number) {
     const query = this.buildQuery(lat, lon, radius);
     const response = await this.withRetry(() =>
-      this.client.get<OverpassResponse>('/interpreter', {
-        params: { data: query },
+      this.client.post<OverpassResponse>('/interpreter', query, {
+        headers: {
+          Accept: '*/*',
+          'Content-Type': 'text/plain',
+          'User-Agent': 'D-Access/1.0',
+        },
       }),
     );
 
@@ -47,12 +51,13 @@ export class OverpassClient {
     return `
 [out:json][timeout:40];
 (
-  nwr(around:${radius},${lat},${lon})[~"^(amenity|shop|tourism|leisure|healthcare)$"~"."];
+  nwr(around:${radius},${lat},${lon})[amenity];
+  nwr(around:${radius},${lat},${lon})[shop];
+  nwr(around:${radius},${lat},${lon})[tourism];
+  nwr(around:${radius},${lat},${lon})[leisure];
+  nwr(around:${radius},${lat},${lon})[healthcare];
   nwr(around:${radius},${lat},${lon})[wheelchair];
   nwr(around:${radius},${lat},${lon})["toilets:wheelchair"];
-
-
- 
 );
 out center tags qt;
 `;

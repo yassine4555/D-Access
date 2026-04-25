@@ -156,12 +156,15 @@ export class PlacesService {
     const normalizedDocs: NormalizedPlace[] = elements
       .map((element) => this.normalizeElement(element))
       .filter((doc): doc is NormalizedPlace => doc !== null);
-
-    this.logger.log(
-      `Overpass fetch completed: fetched=${elements.length}, valid=${normalizedDocs.length}`,
+    const uniqueDocs = Array.from(
+      new Map(normalizedDocs.map((doc) => [doc.sourceId, doc])).values(),
     );
 
-    const operations = normalizedDocs.map((doc) => ({
+    this.logger.log(
+      `Overpass fetch completed: fetched=${elements.length}, valid=${normalizedDocs.length}, unique=${uniqueDocs.length}`,
+    );
+
+    const operations = uniqueDocs.map((doc) => ({
       updateOne: {
         filter: { sourceId: doc.sourceId },
         update: { $set: doc },

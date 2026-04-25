@@ -12,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import MapView, { Marker, Region, UrlTile } from 'react-native-maps';
-import * as Location from 'expo-location';
 import { authApi, placesApi } from '../../services/api';
 import { colors } from '../../constants/colors';
 import { BackIcon } from '../../components/icons/BackIcon';
@@ -30,6 +29,7 @@ import {
   getCachedNearbyPlaces,
   setCachedNearbyPlaces,
 } from '../../services/placesCacheService';
+import { getCurrentCoordinatesAsync } from '../../services/location';
 
 type ReportItem = {
   id: string;
@@ -459,28 +459,21 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
 
     const resolveUserLocation = async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-
-        if (status !== 'granted') {
-          await fetchPlaces(FALLBACK_REGION, undefined, { showLoader: true });
-          return;
-        }
-
-        const current = await Location.getCurrentPositionAsync({});
+        const current = await getCurrentCoordinatesAsync();
         if (!isMounted) {
           return;
         }
 
         const nextRegion: Region = {
-          latitude: current.coords.latitude,
-          longitude: current.coords.longitude,
+          latitude: current.latitude,
+          longitude: current.longitude,
           latitudeDelta: 0.04,
           longitudeDelta: 0.04,
         };
 
         setUserCoordinates({
-          latitude: current.coords.latitude,
-          longitude: current.coords.longitude,
+          latitude: current.latitude,
+          longitude: current.longitude,
         });
 
         currentRegionRef.current = nextRegion;
@@ -553,17 +546,17 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
 
   const centerOnUserOrFallback = async () => {
     try {
-      const current = await Location.getCurrentPositionAsync({});
+      const current = await getCurrentCoordinatesAsync();
       const nextRegion: Region = {
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
+        latitude: current.latitude,
+        longitude: current.longitude,
         latitudeDelta: 0.04,
         longitudeDelta: 0.04,
       };
 
       setUserCoordinates({
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
+        latitude: current.latitude,
+        longitude: current.longitude,
       });
 
       currentRegionRef.current = nextRegion;
@@ -977,7 +970,7 @@ export default function MapScreen({ navigation }: MapScreenProps<'MapMain'>) {
           )}
 
           {/* ── Reports Nearby ── */}
-          <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+        <View style={[styles.sectionHeader, { marginTop: 8 }]}>
             <Text style={styles.sectionTitle}>Reports Nearby</Text>
             <TouchableOpacity>
               <Text style={styles.seeAll}>See all</Text>
