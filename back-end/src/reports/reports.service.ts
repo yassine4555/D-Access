@@ -112,6 +112,38 @@ export class ReportsService {
     };
   }
 
+  async findOne(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid report id.');
+    }
+
+    const report = await this.reportModel
+      .findById(id)
+      .populate('userId', 'firstName lastName email')
+      .populate('placeId', 'sourceId name')
+      .lean()
+      .exec();
+
+    if (!report) {
+      throw new NotFoundException('Report not found.');
+    }
+
+    return {
+      id: report._id.toString(),
+      issueType: report.issueType,
+      description: report.description,
+      imageUrl: this.toDataUrl(report.imageData, report.imageContentType),
+      status: report.status,
+      spamScore: report.spamScore,
+      confidenceScore: report.confidenceScore,
+      createdAt: report.createdAt,
+      moderatedAt: report.moderatedAt,
+      moderationReason: report.moderationReason,
+      user: this.mapReporter(report.userId),
+      place: this.mapPlace(report.placeId),
+    };
+  }
+
   async listForAdmin(query: GetAdminReportsDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;

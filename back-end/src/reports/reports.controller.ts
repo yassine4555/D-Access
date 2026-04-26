@@ -57,6 +57,14 @@ export class ReportsController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MODERATOR)
+  @Get('admin/reports/:id')
+  @ApiOperation({ summary: 'Admin get single report detail' })
+  getAdminReportDetail(@Param('id') id: string) {
+    return this.reportsService.findOne(id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MODERATOR)
   @Patch('admin/reports/:id/verify')
   verifyReport(
     @Param('id') id: string,
