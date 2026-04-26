@@ -28,6 +28,8 @@ export class MarketplaceController {
   @Get('marketplace')
   @ApiOperation({ summary: 'List marketplace items' })
   findAll(@Query() query: ListMarketplaceItemsDto) {
+    // Force public endpoint to only return active (inStock) items
+    query.inStock = true;
     return this.marketplaceService.findAll(query);
   }
 
