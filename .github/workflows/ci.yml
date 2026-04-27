@@ -33,11 +33,17 @@ jobs:
       - name: Lint
         run: npm run lint:check
 
+      - name: Lint Sprint 4
+        run: npm run lint:sprint4
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Test
         run: npm test -- --runInBand
+
+      - name: Test Sprint 4
+        run: npm run test:sprint4
 
       - name: Build
         run: npm run build
